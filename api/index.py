@@ -1,16 +1,10 @@
 """
-Entry point for Vercel Serverless Function - Minimal Test
+Entry point for Vercel Serverless Function
 """
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from flask import Flask, jsonify, render_template_string
 
 app = Flask(__name__)
 
-# Simple test endpoints
 @app.route('/')
 def home():
     return render_template_string("""
@@ -46,9 +40,7 @@ def login():
 
 @app.route('/api/health')
 def health():
-    return jsonify({
-        'status': 'ok',
-        'message': 'Minimal app running'
-    })
+    return jsonify({'status': 'ok'})
 
-print("✅ Minimal app loaded")
+# Vercel handler
+handler = app
