@@ -1625,7 +1625,25 @@ def ganti_password_sendiri():
 # ─────────────────────────────────────
 #  INIT DATABASE (SAAT IMPORT/STARTUP)
 # ─────────────────────────────────────
-init_db()
+try:
+    init_db()
+    print("✅ Database initialized")
+except Exception as e:
+    print(f"⚠️ Database init error (will retry on first request): {e}")
+    import traceback
+    print(traceback.format_exc())
+    _db_init_error = e
+
+# Lazy init handler - akan mencoba init lagi saat request pertama jika gagal
+@app.before_request
+def ensure_db():
+    if '_db_init_error' in globals():
+        try:
+            init_db()
+            print("✅ Database initialized (retry)")
+            del globals()['_db_init_error']
+        except Exception as e:
+            print(f"❌ Database init failed again: {e}")
 
 # ─────────────────────────────────────
 #  JALANKAN SERVER (LOCAL DEV)
