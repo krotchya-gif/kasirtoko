@@ -1623,10 +1623,14 @@ def ganti_password_sendiri():
 
 
 # ─────────────────────────────────────
-#  JALANKAN SERVER
+#  INIT DATABASE (SAAT IMPORT/STARTUP)
+# ─────────────────────────────────────
+init_db()
+
+# ─────────────────────────────────────
+#  JALANKAN SERVER (LOCAL DEV)
 # ─────────────────────────────────────
 if __name__ == '__main__':
-    init_db()
     print("\n" + "="*50)
     print("  🏪 KasirToko v1.11.3 — Python + Flask + SQLite")
     print("="*50)
