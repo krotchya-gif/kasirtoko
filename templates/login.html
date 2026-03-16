@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login — KasirToko</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#242736;--border:#2e3244;
+  --accent:#f5a623;--green:#3dffa0;--red:#ff5c5c;--blue:#5c9aff;
+  --text:#f0f0f8;--muted:#8891a8;
+  --fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  background:var(--bg);color:var(--text);font-family:var(--fb);
+  min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:20px;
+}
+
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:20px;
+  padding:40px 36px;width:100%;max-width:400px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+}
+
+.brand{
+  text-align:center;margin-bottom:32px;
+}
+.brand-logo{
+  font-family:var(--fh);font-size:28px;font-weight:800;
+  letter-spacing:-0.5px;margin-bottom:6px;
+}
+.brand-logo span{color:var(--accent);}
+.brand-sub{font-size:13px;color:var(--muted);}
+
+.error-box{
+  background:rgba(255,92,92,.1);border:1px solid rgba(255,92,92,.4);
+  color:var(--red);border-radius:9px;padding:10px 14px;font-size:13px;
+  margin-bottom:18px;display:flex;align-items:center;gap:8px;
+}
+
+.form-group{margin-bottom:16px;}
+.form-group label{
+  display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
+  font-weight:500;letter-spacing:.3px;
+}
+.form-group input{
+  width:100%;background:var(--surface2);border:1.5px solid var(--border);
+  color:var(--text);padding:11px 14px;border-radius:10px;font-family:var(--fb);
+  font-size:14px;outline:none;transition:border .2s;
+}
+.form-group input:focus{border-color:var(--accent);}
+.form-group input::placeholder{color:var(--muted);}
+
+.btn-login{
+  width:100%;background:var(--accent);color:#111;border:none;
+  padding:13px;border-radius:10px;font-family:var(--fh);font-size:14px;
+  font-weight:800;cursor:pointer;transition:all .15s;margin-top:6px;
+  letter-spacing:.3px;
+}
+.btn-login:hover{background:#ffc04a;transform:translateY(-1px);}
+.btn-login:active{transform:scale(.98);}
+
+.hint{
+  margin-top:24px;padding-top:18px;border-top:1px solid var(--border);
+  font-size:12px;color:var(--muted);line-height:1.8;text-align:center;
+}
+.hint code{
+  background:var(--surface2);border:1px solid var(--border);padding:1px 6px;
+  border-radius:4px;font-size:11px;color:var(--text);font-family:monospace;
+}
+
+.db-dot{
+  display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--green);margin-right:5px;
+  animation:pulse 2s infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+@media(max-width:480px){
+  .card{padding:28px 20px;border-radius:16px;}
+}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="brand">
+    <div class="brand-logo">Kasir<span>Toko</span></div>
+    <div class="brand-sub"><span class="db-dot"></span>Sistem Kasir Point of Sale</div>
+  </div>
+
+  {% if error %}
+  <div class="error-box">⚠️ {{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="/login" autocomplete="on">
+    <div class="form-group">
+      <label>USERNAME</label>
+      <input
+        type="text"
+        name="username"
+        placeholder="Masukkan username..."
+        autofocus
+        autocomplete="username"
+        required
+        value="{{ request.form.get('username', '') }}"
+      >
+    </div>
+    <div class="form-group">
+      <label>PASSWORD</label>
+      <input
+        type="password"
+        name="password"
+        placeholder="Masukkan password..."
+        autocomplete="current-password"
+        required
+      >
+    </div>
+    <button type="submit" class="btn-login">🔐 MASUK</button>
+  </form>
+
+  <div class="hint">
+    Akun default saat pertama kali setup:<br>
+    <code>pemilik</code> / <code>pemilik123</code> &nbsp;·&nbsp;
+    <code>karyawan</code> / <code>karyawan123</code><br>
+    <span style="color:var(--red);font-size:11px">Segera ganti password setelah login pertama.</span>
+  </div>
+</div>
+
+</body>
+</html>

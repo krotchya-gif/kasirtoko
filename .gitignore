@@ -1,0 +1,18 @@
+# Database (data toko — jangan di-push ke git)
+*.db
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# Log
+logs/
+*.log
+
+# macOS
+.DS_Store
