@@ -16,7 +16,12 @@
     }
   ],
   "env": {
-    "SECRET_KEY": "kasirtoko-secret-key-change-in-production",
-    "FLASK_ENV": "production"
-  }
+    "SECRET_KEY": "kasirtoko-secret-key-change-in-production"
+  },
+  "crons": [
+    {
+      "path": "/api/health",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }
