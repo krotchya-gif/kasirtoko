@@ -1,36 +1,54 @@
 """
-Entry point for Vercel Serverless Function - Debug Version
+Entry point for Vercel Serverless Function - Minimal Test
 """
 import sys
 import os
-import traceback
 
-# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Force SQLite for testing
-os.environ['POSTGRES_URL'] = ''
-os.environ['POSTGRES_PRISMA_URL'] = ''
+from flask import Flask, jsonify, render_template_string
 
-print("="*50)
-print("STARTUP DEBUG - Forcing SQLite")
-print("="*50)
+app = Flask(__name__)
 
-from flask import Flask, jsonify
+# Simple test endpoints
+@app.route('/')
+def home():
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html>
+    <head><title>KasirToko</title></head>
+    <body>
+        <h1>🏪 KasirToko</h1>
+        <p>Aplikasi kasir toko sederhana</p>
+        <p><a href="/api/health">Health Check</a></p>
+        <p><a href="/login">Login</a></p>
+    </body>
+    </html>
+    """)
 
-try:
-    from app import app as application
-    app = application
-    print("✅ App loaded successfully with SQLite")
-except Exception as e:
-    error_msg = f"Error loading app: {e}\n{traceback.format_exc()}"
-    print(error_msg)
-    
-    app = Flask(__name__)
-    @app.route('/')
-    def startup_error():
-        return f"<h1>Startup Error</h1><pre>{error_msg}</pre>", 500
+@app.route('/login')
+def login():
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html>
+    <head><title>Login - KasirToko</title></head>
+    <body>
+        <h1>Login</h1>
+        <form method="post">
+            <input type="text" name="username" placeholder="Username"><br>
+            <input type="password" name="password" placeholder="Password"><br>
+            <button type="submit">Login</button>
+        </form>
+        <p>Default: pemilik/pemilik123 atau karyawan/karyawan123</p>
+    </body>
+    </html>
+    """)
 
 @app.route('/api/health')
 def health():
-    return jsonify({'status': 'ok', 'mode': 'sqlite_fallback'})
+    return jsonify({
+        'status': 'ok',
+        'message': 'Minimal app running'
+    })
+
+print("✅ Minimal app loaded")
