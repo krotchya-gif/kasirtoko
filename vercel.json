@@ -3,25 +3,13 @@
   "builds": [
     {
       "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxLambdaSize": "15mb"
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "/api/index.py"
-    }
-  ],
-  "env": {
-    "SECRET_KEY": "kasirtoko-secret-key-change-in-production"
-  },
-  "crons": [
-    {
-      "path": "/api/health",
-      "schedule": "0 0 * * *"
+      "dest": "api/index.py"
     }
   ]
 }
