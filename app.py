@@ -110,6 +110,23 @@ def db_execute_many(conn, sql, params_list):
     c.executemany(sql, params_list)
     return c
 
+
+def db_execute_insert(conn, sql, params=None):
+    """Execute INSERT and return lastrowid (works for both SQLite and PostgreSQL)"""
+    c = get_db_cursor(conn)
+    
+    if USE_POSTGRES:
+        # Add RETURNING id if not present
+        if 'RETURNING' not in sql.upper():
+            sql = sql.rstrip(';') + ' RETURNING id'
+        c.execute(sql, params)
+        row = c.fetchone()
+        c.lastrowid = row['id'] if row else None
+        return c
+    else:
+        c.execute(sql, params)
+        return c
+
 # ─────────────────────────────────────
 #  DATABASE INIT
 # ─────────────────────────────────────
@@ -833,7 +850,7 @@ def buat_transaksi():
     conn = get_db()
     try:
         # Insert header transaksi
-        cur = db_execute(conn, 
+        cur = db_execute_insert(conn, 
             """INSERT INTO transaksi
                (no_trx, subtotal, diskon, diskon_val, diskon_tipe, total, bayar, kembalian, pelanggan_id, metode_bayar)
                VALUES (?,?,?,?,?,?,?,?,?,?)""",
