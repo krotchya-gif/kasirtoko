@@ -1,0 +1,89 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Database (akan di-mount sebagai volume)
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Backup
+backups/
+*.sql
+*.tar.gz
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Deploy scripts
+deploy/
+*.sh
+
+# Documentation
+*.md
+!README.md
+
+# Tests
+tests/
+test/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.example
+.env.local
+.env.*.local
+
+# Node (jika ada)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.github/
+.travis.yml
+.gitlab-ci.yml

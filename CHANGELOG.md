@@ -5,6 +5,125 @@ Format: `[Versi] — Tanggal — Ringkasan`
 
 ---
 
+## [v2.0.0] — 2026-03-17 — 🎉 Major Update
+
+### ✨ Fitur Baru
+
+#### 🗑️ Void Transaksi
+- **Void transaksi** — Batalkan transaksi yang salah dengan pengembalian stok otomatis
+- **Restore transaksi** — Kembalikan transaksi yang sudah di-void (batalkan void)
+- **Alasan void wajib** — Setiap void harus ada keterangan
+- **Filter status** — Lihat transaksi aktif, void, atau semua
+- **Audit trail** — Tercatat siapa yang void dan kapan
+
+#### 📦 Riwayat Perubahan Stok (Stok Log)
+- **Tabel `stok_log`** — Tracking semua perubahan stok
+- **Tipe perubahan**: masuk, keluar, adjust
+- **Detail perubahan**: stok sebelum → sesudah, jumlah, alasan
+- **Filter & search** — Filter berdasarkan tanggal, tipe, produk
+- **Siapa & kapan** — Tercatat user dan timestamp
+
+#### ⚖️ Adjust Stok Manual
+- **Form adjust stok** — Ubah stok fisik dengan alasan
+- **Pilihan alasan**:
+  - Stok Fisik Berbeda
+  - Barang Rusak/Hilang
+  - Barang Expired
+  - Penyesuaian Awal
+  - Lainnya
+- **Keterangan tambahan** — Catat detail penyesuaian
+- **Preview selisih** — Lihat perubahan sebelum simpan
+
+#### 📊 Grafik Penjualan (Chart.js)
+- **Integrasi Chart.js 4.4.1**
+- **3 tipe grafik**: Harian, Mingguan, Bulanan
+- **Dual axis**: Bar (Omzet) + Line (Jumlah Transaksi)
+- **Interactive**: Hover untuk detail
+- **Stats ringkasan**: Total transaksi, omzet, diskon
+
+#### 📄 Export PDF Laporan
+- **Library ReportLab 4.1.0**
+- **Laporan lengkap**: Ringkasan + detail transaksi
+- **Desain gelap** — Sesuai tema aplikasi
+- **Printable A4** — Siap print atau simpan
+
+#### 🏷️ Barcode Generator
+- **Generate otomatis** — Tombol 🎲 di form produk (13 digit EAN13)
+- **Format support**: EAN13 & Code128
+- **Cetak label barcode**:
+  - Sheet PDF dengan grid layout
+  - 55 label per halaman A4
+  - Pilih multiple produk
+- **Preview individual** — Lihat barcode sebelum cetak
+- **Download PNG** — Simpan barcode per produk
+
+#### 📤 Share Struk Digital
+- **Multi-platform share**:
+  - 💬 WhatsApp — Gambar struk langsung ke chat
+  - ✈️ Telegram — Share format teks rapi
+  - 📷 Instagram — Download & upload story/post
+  - ✉️ Email — Kirim detail transaksi lengkap
+  - 🖨️ RawBT — Print langsung dari share menu
+  - 💾 Download — Simpan PNG struk
+- **Modal share** — UI grid pilihan aplikasi
+- **Preview struk** — Lihat sebelum share
+- **Salin teks** — Copy struk ke clipboard
+- **API**: `GET /api/struk/<id>/image` — Generate PNG
+
+### 🖼️ Perubahan Database
+
+#### Tabel Baru
+```sql
+CREATE TABLE stok_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    produk_id INTEGER NOT NULL,
+    tipe TEXT NOT NULL CHECK(tipe IN ('masuk','keluar','adjust')),
+    jumlah INTEGER NOT NULL,
+    stok_sebelum INTEGER NOT NULL,
+    stok_sesudah INTEGER NOT NULL,
+    alasan TEXT DEFAULT '',
+    keterangan TEXT DEFAULT '',
+    transaksi_id INTEGER DEFAULT NULL,
+    dibuat_oleh TEXT DEFAULT '',
+    waktu TEXT DEFAULT (datetime('now','localtime'))
+);
+```
+
+#### Kolom Baru (tabel transaksi)
+- `status` — 'aktif' atau 'void'
+- `void_reason` — Alasan pembatalan
+- `void_by` — User yang melakukan void
+- `void_at` — Timestamp void
+
+### 🔌 API Endpoints Baru
+
+| Endpoint | Method | Deskripsi |
+|----------|--------|-----------|
+| `/api/transaksi/<id>/void` | POST | Void transaksi |
+| `/api/transaksi/<id>/restore` | POST | Restore transaksi |
+| `/api/produk/<id>/adjust-stok` | POST | Adjust stok manual |
+| `/api/produk/<id>/stok-history` | GET | Riwayat stok produk |
+| `/api/stok-log` | GET | Semua riwayat stok |
+| `/api/laporan/chart` | GET | Data grafik |
+| `/api/export/pdf` | GET | Export laporan PDF |
+| `/api/struk/<id>/image` | GET | Generate struk PNG |
+| `/api/barcode/generate` | POST | Generate barcode image |
+| `/api/barcode/print-sheet` | POST | Generate sheet PDF |
+
+### 📦 Dependencies Baru
+```txt
+reportlab==4.1.0      # PDF export
+python-barcode==0.15.1 # Barcode generator
+pillow==10.3.0        # Image processing
+```
+
+### 📚 Dokumentasi
+- Update DOKUMENTASI.md — Dokumentasi teknis lengkap
+- Update README.md — Quick start & fitur baru
+- Update CHANGELOG.md — Riwayat perubahan
+
+---
+
 ## [v1.11.3] — 2026-03-16
 
 ### 📚 Dokumentasi

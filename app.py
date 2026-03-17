@@ -15,7 +15,7 @@ import csv
 import io
 
 # Database configuration - PostgreSQL for Vercel, SQLite for local
-POSTGRES_URL = os.environ.get('POSTGRES_URL') or os.environ.get('POSTGRES_PRISMA_URL')
+POSTGRES_URL = os.environ.get('POSTGRES_URL') or os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_PRISMA_URL')
 USE_POSTGRES = bool(POSTGRES_URL)
 
 if USE_POSTGRES:
@@ -293,6 +293,54 @@ def init_db():
             c.execute(col_sql)
         except Exception:
             pass
+
+    # Tambah kolom status void ke transaksi (backward-compatible)
+    for col_sql in [
+        "ALTER TABLE transaksi ADD COLUMN status TEXT DEFAULT 'aktif'",
+        "ALTER TABLE transaksi ADD COLUMN void_reason TEXT DEFAULT ''",
+        "ALTER TABLE transaksi ADD COLUMN void_by TEXT DEFAULT ''",
+        "ALTER TABLE transaksi ADD COLUMN void_at TEXT DEFAULT ''",
+    ]:
+        try:
+            c.execute(col_sql)
+        except Exception:
+            pass
+
+    # Tabel stok_log untuk riwayat perubahan stok
+    if USE_POSTGRES:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS stok_log (
+                id           SERIAL PRIMARY KEY,
+                produk_id    INTEGER NOT NULL,
+                tipe         TEXT    NOT NULL CHECK(tipe IN ('masuk','keluar','adjust')),
+                jumlah       INTEGER NOT NULL,
+                stok_sebelum INTEGER NOT NULL,
+                stok_sesudah INTEGER NOT NULL,
+                alasan       TEXT    DEFAULT '',
+                keterangan   TEXT    DEFAULT '',
+                transaksi_id INTEGER DEFAULT NULL,
+                dibuat_oleh  TEXT    DEFAULT '',
+                waktu        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (produk_id) REFERENCES produk(id) ON DELETE CASCADE
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS stok_log (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                produk_id    INTEGER NOT NULL,
+                tipe         TEXT    NOT NULL CHECK(tipe IN ('masuk','keluar','adjust')),
+                jumlah       INTEGER NOT NULL,
+                stok_sebelum INTEGER NOT NULL,
+                stok_sesudah INTEGER NOT NULL,
+                alasan       TEXT    DEFAULT '',
+                keterangan   TEXT    DEFAULT '',
+                transaksi_id INTEGER DEFAULT NULL,
+                dibuat_oleh  TEXT    DEFAULT '',
+                waktu        TEXT    DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (produk_id) REFERENCES produk(id) ON DELETE CASCADE
+            )
+        """)
 
     # Tabel tutup_kasir (end-of-day closing)
     if USE_POSTGRES:
@@ -726,7 +774,8 @@ def laporan_top_produk():
     limit = int(request.args.get('limit', 10))
 
     conn       = get_db()
-    sql_filter = "WHERE 1=1"
+    # Filter: hanya transaksi aktif (exclude void)
+    sql_filter = "WHERE COALESCE(t.status, 'aktif') = 'aktif'"
     params     = []
     if dari:
         sql_filter += " AND DATE(t.waktu) >= ?"
@@ -826,6 +875,7 @@ def buat_transaksi():
 def get_transaksi():
     tgl_dari = request.args.get('dari', '')
     tgl_ke   = request.args.get('ke', '')
+    status   = request.args.get('status', '')  # aktif, void, atau kosong (semua)
     limit    = int(request.args.get('limit', 100))
 
     conn = get_db()
@@ -842,6 +892,9 @@ def get_transaksi():
     if tgl_ke:
         sql += " AND DATE(t.waktu) <= ?"
         params.append(tgl_ke)
+    if status:
+        sql += " AND COALESCE(t.status, 'aktif') = ?"
+        params.append(status)
     sql += " ORDER BY t.waktu DESC LIMIT ?"
     params.append(limit)
 
@@ -983,6 +1036,7 @@ def tutup_kasir_preview():
                               THEN total ELSE 0 END), 0)              AS total_qris
         FROM transaksi
         WHERE tutup_kasir_id IS NULL
+          AND COALESCE(status, 'aktif') = 'aktif'
     """).fetchone()
     conn.close()
     return jsonify(row_to_dict(row))
@@ -996,7 +1050,7 @@ def buat_tutup_kasir():
     keterangan = d.get('keterangan', '').strip()
 
     conn = get_db()
-    # Ambil preview dulu
+    # Ambil preview dulu - hanya transaksi aktif yang belum ditutup
     row = db_execute(conn, """
         SELECT
             COUNT(*)                                                  AS jumlah_trx,
@@ -1009,6 +1063,7 @@ def buat_tutup_kasir():
                               THEN total ELSE 0 END), 0)              AS total_qris
         FROM transaksi
         WHERE tutup_kasir_id IS NULL
+          AND COALESCE(status, 'aktif') = 'aktif'
     """).fetchone()
 
     if row['jumlah_trx'] == 0:
@@ -1025,9 +1080,9 @@ def buat_tutup_kasir():
     )
     tk_id = cur.lastrowid
 
-    # Tandai semua transaksi belum tutup dengan id ini
+    # Tandai semua transaksi belum tutup dengan id ini (hanya yang aktif)
     db_execute(conn, 
-        "UPDATE transaksi SET tutup_kasir_id=? WHERE tutup_kasir_id IS NULL",
+        "UPDATE transaksi SET tutup_kasir_id=? WHERE tutup_kasir_id IS NULL AND COALESCE(status, 'aktif') = 'aktif'",
         (tk_id,)
     )
     conn.commit()
@@ -1098,6 +1153,675 @@ def konfirmasi_tutup_kasir(tk_id):
     ).fetchone())
     conn.close()
     return jsonify(result)
+
+
+# ═════════════════════════════════════
+#  API: VOID / CANCEL TRANSAKSI
+# ═════════════════════════════════════
+@app.route('/api/transaksi/<int:tid>/void', methods=['POST'])
+@pemilik_required
+def void_transaksi(tid):
+    """Void transaksi: kembalikan stok dan tandai transaksi sebagai void."""
+    user = get_current_user()
+    d = request.json or {}
+    reason = d.get('reason', '').strip()
+    
+    if not reason:
+        return jsonify({'error': 'Alasan void wajib diisi'}), 400
+    
+    conn = get_db()
+    conn.execute("BEGIN TRANSACTION")
+    
+    try:
+        # Cek transaksi exists dan belum void
+        trx = db_execute(conn, 
+            "SELECT * FROM transaksi WHERE id=?", (tid,)
+        ).fetchone()
+        
+        if not trx:
+            conn.rollback()
+            conn.close()
+            return jsonify({'error': 'Transaksi tidak ditemukan'}), 404
+        
+        if trx.get('status') == 'void':
+            conn.rollback()
+            conn.close()
+            return jsonify({'error': 'Transaksi sudah di-void sebelumnya'}), 400
+        
+        # Jika transaksi sudah masuk tutup kasir yang confirmed, tidak bisa void
+        if trx.get('tutup_kasir_id'):
+            tk = db_execute(conn, 
+                "SELECT status FROM tutup_kasir WHERE id=?", (trx['tutup_kasir_id'],)
+            ).fetchone()
+            if tk and tk['status'] == 'confirmed':
+                conn.rollback()
+                conn.close()
+                return jsonify({'error': 'Transaksi sudah ditutup dan dikonfirmasi, tidak bisa di-void'}), 400
+        
+        waktu_now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Kembalikan stok untuk setiap item
+        items = db_execute(conn, 
+            "SELECT * FROM transaksi_item WHERE transaksi_id=?", (tid,)
+        ).fetchall()
+        
+        for item in items:
+            produk_id = item['produk_id']
+            qty = item['qty']
+            
+            # Get stok saat ini
+            prod = db_execute(conn, 
+                "SELECT stok FROM produk WHERE id=?", (produk_id,)
+            ).fetchone()
+            
+            if prod:
+                stok_sebelum = prod['stok']
+                stok_sesudah = stok_sebelum + qty
+                
+                # Update stok produk
+                db_execute(conn, 
+                    "UPDATE produk SET stok = stok + ? WHERE id=?",
+                    (qty, produk_id)
+                )
+                
+                # Catat di stok_log (void)
+                db_execute(conn, 
+                    """INSERT INTO stok_log 
+                       (produk_id, tipe, jumlah, stok_sebelum, stok_sesudah, 
+                        alasan, keterangan, transaksi_id, dibuat_oleh)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (produk_id, 'masuk', qty, stok_sebelum, stok_sesudah,
+                     'void_transaksi', f'Pengembalian stok dari void transaksi {trx["no_trx"]}', 
+                     tid, user['nama'])
+                )
+        
+        # Update status transaksi menjadi void
+        db_execute(conn, 
+            """UPDATE transaksi 
+               SET status='void', void_reason=?, void_by=?, void_at=?
+               WHERE id=?""",
+            (reason, user['nama'], waktu_now, tid)
+        )
+        
+        conn.commit()
+        
+        # Return updated transaksi
+        result = row_to_dict(db_execute(conn, 
+            "SELECT * FROM transaksi WHERE id=?", (tid,)
+        ).fetchone())
+        conn.close()
+        
+        return jsonify({'ok': True, 'transaksi': result})
+        
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/transaksi/<int:tid>/restore', methods=['POST'])
+@pemilik_required
+def restore_transaksi(tid):
+    """Restore transaksi yang sudah di-void (batalkan void)."""
+    user = get_current_user()
+    conn = get_db()
+    conn.execute("BEGIN TRANSACTION")
+    
+    try:
+        # Cek transaksi exists dan status void
+        trx = db_execute(conn, 
+            "SELECT * FROM transaksi WHERE id=?", (tid,)
+        ).fetchone()
+        
+        if not trx:
+            conn.rollback()
+            conn.close()
+            return jsonify({'error': 'Transaksi tidak ditemukan'}), 404
+        
+        if trx.get('status') != 'void':
+            conn.rollback()
+            conn.close()
+            return jsonify({'error': 'Transaksi tidak dalam status void'}), 400
+        
+        # Kurangi stok kembali (karena transaksi di-restore)
+        items = db_execute(conn, 
+            "SELECT * FROM transaksi_item WHERE transaksi_id=?", (tid,)
+        ).fetchall()
+        
+        for item in items:
+            produk_id = item['produk_id']
+            qty = item['qty']
+            
+            # Get stok saat ini
+            prod = db_execute(conn, 
+                "SELECT stok FROM produk WHERE id=?", (produk_id,)
+            ).fetchone()
+            
+            if prod:
+                stok_sebelum = prod['stok']
+                stok_sesudah = max(0, stok_sebelum - qty)
+                
+                # Update stok produk
+                db_execute(conn, 
+                    "UPDATE produk SET stok = MAX(0, stok - ?) WHERE id=?",
+                    (qty, produk_id)
+                )
+                
+                # Catat di stok_log (restore)
+                db_execute(conn, 
+                    """INSERT INTO stok_log 
+                       (produk_id, tipe, jumlah, stok_sebelum, stok_sesudah, 
+                        alasan, keterangan, transaksi_id, dibuat_oleh)
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                    (produk_id, 'keluar', qty, stok_sebelum, stok_sesudah,
+                     'restore_transaksi', f'Pengurangan stok dari restore transaksi {trx["no_trx"]}', 
+                     tid, user['nama'])
+                )
+        
+        # Update status transaksi menjadi aktif
+        db_execute(conn, 
+            """UPDATE transaksi 
+               SET status='aktif', void_reason='', void_by='', void_at=''
+               WHERE id=?""",
+            (tid,)
+        )
+        
+        conn.commit()
+        
+        result = row_to_dict(db_execute(conn, 
+            "SELECT * FROM transaksi WHERE id=?", (tid,)
+        ).fetchone())
+        conn.close()
+        
+        return jsonify({'ok': True, 'transaksi': result})
+        
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+# ═════════════════════════════════════
+#  API: SHARE STRUK DIGITAL
+# ═════════════════════════════════════
+@app.route('/api/struk/<int:tid>/image', methods=['GET'])
+def generate_struk_image(tid):
+    """Generate struk transaksi sebagai gambar PNG untuk share."""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import textwrap
+    except ImportError:
+        return jsonify({'error': 'Library PIL tidak tersedia'}), 500
+    
+    conn = get_db()
+    
+    # Get transaksi
+    trx = db_execute(conn, """
+        SELECT t.*, COALESCE(p.nama, '') AS pelanggan_nama
+        FROM transaksi t
+        LEFT JOIN pelanggan p ON p.id = t.pelanggan_id
+        WHERE t.id = ?
+    """, (tid,)).fetchone()
+    
+    if not trx:
+        conn.close()
+        return jsonify({'error': 'Transaksi tidak ditemukan'}), 404
+    
+    # Get items
+    items = db_execute(conn, 
+        "SELECT * FROM transaksi_item WHERE transaksi_id=?", (tid,)
+    ).fetchall()
+    
+    # Get pengaturan toko
+    pengaturan = db_execute(conn, "SELECT kunci, nilai FROM pengaturan").fetchall()
+    toko = {p['kunci']: p['nilai'] for p in pengaturan}
+    conn.close()
+    
+    try:
+        # Ukuran kertas thermal (58mm width ~ 220px at 96 DPI)
+        WIDTH = 220
+        MARGIN = 10
+        LINE_HEIGHT = 16
+        HEADER_HEIGHT = 80
+        FOOTER_HEIGHT = 60
+        
+        # Hitung total height
+        item_height = len(items) * (LINE_HEIGHT * 2 + 4)  # nama + qty x harga
+        summary_height = LINE_HEIGHT * 6  # subtotal, diskon, total, bayar, kembalian, metode
+        total_height = HEADER_HEIGHT + item_height + summary_height + FOOTER_HEIGHT + 40
+        
+        # Buat image
+        img = Image.new('RGB', (WIDTH, total_height), color='#1a1d27')
+        draw = ImageDraw.Draw(img)
+        
+        # Font (gunakan default jika custom font tidak tersedia)
+        try:
+            font_title = ImageFont.truetype("arial.ttf", 14)
+            font_normal = ImageFont.truetype("arial.ttf", 11)
+            font_small = ImageFont.truetype("arial.ttf", 9)
+        except:
+            font_title = ImageFont.load_default()
+            font_normal = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+        
+        y = MARGIN
+        
+        # Header Toko
+        nama_toko = toko.get('nama_toko', 'TOKO')
+        draw.text((WIDTH//2, y), nama_toko, fill='#f5a623', font=font_title, anchor='mt')
+        y += LINE_HEIGHT + 5
+        
+        alamat = toko.get('alamat', '')
+        if alamat:
+            draw.text((WIDTH//2, y), alamat, fill='#8891a8', font=font_small, anchor='mt')
+            y += LINE_HEIGHT
+        
+        telp = toko.get('telp', '')
+        if telp:
+            draw.text((WIDTH//2, y), f'Telp: {telp}', fill='#8891a8', font=font_small, anchor='mt')
+            y += LINE_HEIGHT
+        
+        y += 10
+        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=1)
+        y += 10
+        
+        # Info Transaksi
+        waktu = datetime.strptime(trx['waktu'], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y %H:%M')
+        draw.text((MARGIN, y), f"No: {trx['no_trx']}", fill='#f0f0f8', font=font_small)
+        y += LINE_HEIGHT
+        draw.text((MARGIN, y), f"Waktu: {waktu}", fill='#f0f0f8', font=font_small)
+        y += LINE_HEIGHT
+        
+        if trx.get('kasir'):
+            draw.text((MARGIN, y), f"Kasir: {trx['kasir']}", fill='#f0f0f8', font=font_small)
+            y += LINE_HEIGHT
+        
+        if trx.get('pelanggan_nama'):
+            draw.text((MARGIN, y), f"Pelanggan: {trx['pelanggan_nama']}", fill='#f0f0f8', font=font_small)
+            y += LINE_HEIGHT
+        
+        y += 5
+        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=1)
+        y += 10
+        
+        # Items
+        for item in items:
+            # Nama produk (wrap jika terlalu panjang)
+            nama = item['nama_produk'][:25]
+            draw.text((MARGIN, y), f"{item['emoji']} {nama}", fill='#f0f0f8', font=font_normal)
+            y += LINE_HEIGHT
+            
+            # Qty x Harga = Subtotal
+            qty_harga = f"{item['qty']} x {item['harga']:,}".replace(',', '.')
+            subtotal = f"{item['subtotal']:,}".replace(',', '.')
+            draw.text((MARGIN + 10, y), qty_harga, fill='#8891a8', font=font_small)
+            draw.text((WIDTH-MARGIN, y), subtotal, fill='#f0f0f8', font=font_normal, anchor='rt')
+            y += LINE_HEIGHT + 4
+        
+        y += 5
+        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=1)
+        y += 10
+        
+        # Summary
+        def draw_row(label, value, color='#f0f0f8', bold=False):
+            nonlocal y
+            font = font_normal if not bold else font_title
+            draw.text((MARGIN, y), label, fill='#8891a8', font=font_small)
+            draw.text((WIDTH-MARGIN, y), value, fill=color, font=font, anchor='rt')
+            y += LINE_HEIGHT
+        
+        subtotal = f"Rp {trx['subtotal']:,}".replace(',', '.')
+        draw_row('Subtotal', subtotal)
+        
+        if trx['diskon'] > 0:
+            diskon = f"- Rp {trx['diskon']:,}".replace(',', '.')
+            draw_row('Diskon', diskon, color='#3dffa0')
+        
+        total = f"Rp {trx['total']:,}".replace(',', '.')
+        draw_row('TOTAL', total, color='#f5a623', bold=True)
+        
+        bayar = f"Rp {trx['bayar']:,}".replace(',', '.')
+        draw_row('Bayar', bayar)
+        
+        kembalian = f"Rp {trx['kembalian']:,}".replace(',', '.')
+        draw_row('Kembalian', kembalian, color='#3dffa0')
+        
+        metode = (trx.get('metode_bayar') or 'tunai').upper()
+        draw_row('Metode', metode)
+        
+        y += 5
+        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=1)
+        y += 10
+        
+        # Footer
+        pesan = toko.get('pesan_struk', 'Terima kasih!')
+        draw.text((WIDTH//2, y), pesan, fill='#8891a8', font=font_small, anchor='mt')
+        y += LINE_HEIGHT + 5
+        
+        draw.text((WIDTH//2, y), '--- KasirToko ---', fill='#f5a623', font=font_small, anchor='mt')
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        buffer.seek(0)
+        
+        filename = f"struk-{trx['no_trx']}.png"
+        return send_file(
+            buffer,
+            mimetype='image/png',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        import traceback
+        print(f"Error generating struk image: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+# ═════════════════════════════════════
+#  API: BARCODE GENERATOR
+# ═════════════════════════════════════
+@app.route('/api/barcode/generate', methods=['POST'])
+@pemilik_required
+def generate_barcode():
+    """Generate barcode image untuk produk."""
+    try:
+        from barcode import EAN13, Code128
+        from barcode.writer import ImageWriter
+        from PIL import Image
+    except ImportError:
+        return jsonify({'error': 'Library barcode tidak tersedia. Install: pip install python-barcode pillow'}), 500
+    
+    d = request.json
+    code = d.get('code', '').strip()
+    format_type = d.get('format', 'code128')  # ean13 atau code128
+    
+    if not code:
+        return jsonify({'error': 'Kode barcode wajib diisi'}), 400
+    
+    try:
+        # Buat barcode
+        if format_type == 'ean13':
+            # EAN13 harus 12-13 digit
+            if not code.isdigit():
+                return jsonify({'error': 'EAN13 hanya boleh angka'}), 400
+            # Pad dengan 0 di depan jika kurang dari 12 digit
+            code = code.zfill(12)[:12]
+            barcode_obj = EAN13(code, writer=ImageWriter())
+        else:
+            # Code128 support alphanumeric
+            barcode_obj = Code128(code, writer=ImageWriter())
+        
+        # Simpan ke buffer
+        buffer = io.BytesIO()
+        barcode_obj.write(buffer, options={
+            'module_height': 15,
+            'module_width': 0.5,
+            'quiet_zone': 6,
+            'font_size': 12,
+            'text_distance': 5
+        })
+        buffer.seek(0)
+        
+        # Konversi ke PNG dengan PIL untuk optimasi
+        img = Image.open(buffer)
+        output = io.BytesIO()
+        img.save(output, format='PNG')
+        output.seek(0)
+        
+        return send_file(
+            output,
+            mimetype='image/png',
+            as_attachment=True,
+            download_name=f'barcode-{code}.png'
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'Gagal generate barcode: {str(e)}'}), 500
+
+
+@app.route('/api/barcode/print-sheet', methods=['POST'])
+@pemilik_required
+def print_barcode_sheet():
+    """Generate sheet barcode untuk multiple produk (printable A4)."""
+    try:
+        from barcode import Code128
+        from barcode.writer import ImageWriter
+        from PIL import Image
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import cm
+    except ImportError:
+        return jsonify({'error': 'Library tidak tersedia'}), 500
+    
+    items = request.json.get('items', [])  # [{id, nama, barcode, harga, qty}]
+    
+    if not items:
+        return jsonify({'error': 'Tidak ada item untuk diprint'}), 400
+    
+    try:
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=1*cm,
+            leftMargin=1*cm,
+            topMargin=1*cm,
+            bottomMargin=1*cm
+        )
+        
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Title
+        elements.append(Paragraph("LABEL BARCODE", styles['Heading1']))
+        elements.append(Spacer(1, 20))
+        
+        # Buat grid barcode (5 kolom x 11 baris = 55 per halaman)
+        from reportlab.lib.utils import ImageReader
+        
+        row_data = []
+        table_data = []
+        
+        for item in items:
+            code = item.get('barcode', '')
+            if not code:
+                continue
+                
+            # Generate barcode image
+            barcode_obj = Code128(code, writer=ImageWriter())
+            img_buffer = io.BytesIO()
+            barcode_obj.write(img_buffer, options={
+                'module_height': 10,
+                'module_width': 0.4,
+                'quiet_zone': 3,
+                'font_size': 8,
+                'text_distance': 3
+            })
+            img_buffer.seek(0)
+            
+            # Buat cell dengan barcode + info produk
+            cell_content = [
+                RLImage(img_buffer, width=2.8*cm, height=1.2*cm),
+                Paragraph(f"<font size='7'>{item['nama'][:20]}</font>", styles['Normal']),
+                Paragraph(f"<font size='8'><b>Rp {item['harga']:,}</b></font>".replace(',', '.'), styles['Normal'])
+            ]
+            
+            row_data.append(cell_content)
+            
+            # 5 kolom per baris
+            if len(row_data) == 5:
+                table_data.append(row_data)
+                row_data = []
+        
+        # Sisa item yang belum masuk
+        if row_data:
+            while len(row_data) < 5:
+                row_data.append('')
+            table_data.append(row_data)
+        
+        if table_data:
+            table = Table(table_data, colWidths=[3.5*cm]*5, rowHeights=[2.5*cm]*len(table_data))
+            table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('BOX', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('LEFTPADDING', (0, 0), (-1, -1), 5),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+                ('TOPPADDING', (0, 0), (-1, -1), 5),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ]))
+            elements.append(table)
+        
+        doc.build(elements)
+        buffer.seek(0)
+        
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name='barcode-sheet.pdf'
+        )
+        
+    except Exception as e:
+        import traceback
+        return jsonify({'error': f'Gagal generate sheet: {str(e)}', 'detail': traceback.format_exc()}), 500
+
+
+# ═════════════════════════════════════
+#  API: STOK LOG / ADJUST STOK
+# ═════════════════════════════════════
+@app.route('/api/stok-log', methods=['GET'])
+@pemilik_required
+def get_stok_log():
+    """Ambil riwayat perubahan stok dengan filter."""
+    dari   = request.args.get('dari', '')
+    ke     = request.args.get('ke', '')
+    produk_id = request.args.get('produk_id', '')
+    tipe   = request.args.get('tipe', '')  # masuk, keluar, adjust
+    limit  = int(request.args.get('limit', 100))
+    
+    conn = get_db()
+    sql = """
+        SELECT sl.*, p.nama as produk_nama, p.emoji as produk_emoji
+        FROM stok_log sl
+        JOIN produk p ON p.id = sl.produk_id
+        WHERE 1=1
+    """
+    params = []
+    
+    if dari:
+        sql += " AND DATE(sl.waktu) >= ?"
+        params.append(dari)
+    if ke:
+        sql += " AND DATE(sl.waktu) <= ?"
+        params.append(ke)
+    if produk_id:
+        sql += " AND sl.produk_id = ?"
+        params.append(int(produk_id))
+    if tipe:
+        sql += " AND sl.tipe = ?"
+        params.append(tipe)
+    
+    sql += " ORDER BY sl.waktu DESC LIMIT ?"
+    params.append(limit)
+    
+    rows = db_execute(conn, sql, params).fetchall()
+    conn.close()
+    return jsonify(rows_to_list(rows))
+
+
+@app.route('/api/produk/<int:pid>/adjust-stok', methods=['POST'])
+@pemilik_required
+def adjust_stok(pid):
+    """Adjust stok manual dengan alasan."""
+    user = get_current_user()
+    d = request.json
+    
+    stok_baru = int(d.get('stok_baru', 0))
+    alasan    = d.get('alasan', '').strip()
+    keterangan = d.get('keterangan', '').strip()
+    
+    if stok_baru < 0:
+        return jsonify({'error': 'Stok tidak boleh negatif'}), 400
+    if not alasan:
+        return jsonify({'error': 'Alasan adjust wajib diisi'}), 400
+    
+    conn = get_db()
+    conn.execute("BEGIN TRANSACTION")
+    
+    try:
+        # Get produk dan stok saat ini
+        prod = db_execute(conn, "SELECT * FROM produk WHERE id=? AND aktif=1", (pid,)).fetchone()
+        if not prod:
+            conn.rollback()
+            conn.close()
+            return jsonify({'error': 'Produk tidak ditemukan'}), 404
+        
+        stok_sebelum = prod['stok']
+        stok_sesudah = stok_baru
+        selisih = stok_sesudah - stok_sebelum
+        
+        if selisih == 0:
+            conn.rollback()
+            conn.close()
+            return jsonify({'error': 'Tidak ada perubahan stok'}), 400
+        
+        # Update stok produk
+        db_execute(conn, 
+            "UPDATE produk SET stok = ?, diubah = datetime('now','localtime') WHERE id=?",
+            (stok_baru, pid)
+        )
+        
+        # Tentukan tipe log
+        tipe = 'masuk' if selisih > 0 else 'keluar'
+        
+        # Catat di stok_log
+        db_execute(conn, 
+            """INSERT INTO stok_log 
+               (produk_id, tipe, jumlah, stok_sebelum, stok_sesudah, 
+                alasan, keterangan, dibuat_oleh)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (pid, tipe, abs(selisih), stok_sebelum, stok_sesudah,
+             alasan, keterangan, user['nama'])
+        )
+        
+        conn.commit()
+        
+        # Return updated produk
+        row = row_to_dict(db_execute(conn, "SELECT * FROM produk WHERE id=?", (pid,)).fetchone())
+        conn.close()
+        
+        return jsonify({'ok': True, 'produk': row})
+        
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/produk/<int:pid>/stok-history', methods=['GET'])
+@pemilik_required
+def get_stok_history(pid):
+    """Ambil riwayat perubahan stok untuk produk tertentu."""
+    limit = int(request.args.get('limit', 50))
+    
+    conn = get_db()
+    rows = db_execute(conn, """
+        SELECT sl.*, p.nama as produk_nama, p.emoji as produk_emoji
+        FROM stok_log sl
+        JOIN produk p ON p.id = sl.produk_id
+        WHERE sl.produk_id = ?
+        ORDER BY sl.waktu DESC
+        LIMIT ?
+    """, (pid, limit)).fetchall()
+    conn.close()
+    return jsonify(rows_to_list(rows))
 
 
 # ─────────────────────────────────────
@@ -1211,6 +1935,7 @@ def laporan_hari_ini():
             COALESCE(AVG(total),0)     AS rata_rata
         FROM transaksi
         WHERE DATE(waktu) = DATE('now','localtime')
+          AND COALESCE(status, 'aktif') = 'aktif'
     """).fetchone()
 
     top_produk = db_execute(conn, """
@@ -1220,6 +1945,7 @@ def laporan_hari_ini():
         FROM transaksi_item ti
         JOIN transaksi t ON t.id = ti.transaksi_id
         WHERE DATE(t.waktu) = DATE('now','localtime')
+          AND COALESCE(t.status, 'aktif') = 'aktif'
         GROUP BY ti.produk_id, ti.nama_produk
         ORDER BY total_nilai DESC
         LIMIT 5
@@ -1238,7 +1964,8 @@ def laporan_rentang():
     ke   = request.args.get('ke', '')
     conn = get_db()
 
-    sql_filter = "WHERE 1=1"
+    # Filter: hanya transaksi aktif (exclude void)
+    sql_filter = "WHERE COALESCE(status, 'aktif') = 'aktif'"
     params = []
     if dari:
         sql_filter += " AND DATE(waktu) >= ?"
@@ -1269,6 +1996,287 @@ def laporan_rentang():
         'stats': row_to_dict(stats),
         'harian': rows_to_list(harian)
     })
+
+
+# ═════════════════════════════════════
+#  API: GRAFIK / CHART DATA
+# ═════════════════════════════════════
+@app.route('/api/laporan/chart', methods=['GET'])
+@pemilik_required
+def laporan_chart():
+    """Data untuk grafik penjualan (harian/mingguan/bulanan)."""
+    tipe = request.args.get('tipe', 'harian')  # harian, mingguan, bulanan
+    dari = request.args.get('dari', '')
+    ke   = request.args.get('ke', '')
+    
+    conn = get_db()
+    
+    if tipe == 'harian':
+        # Default: 30 hari terakhir jika tidak ada filter
+        if not dari:
+            dari = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        if not ke:
+            ke = datetime.now().strftime('%Y-%m-%d')
+            
+        rows = db_execute(conn, """
+            SELECT 
+                DATE(waktu) as label,
+                COUNT(*) as transaksi,
+                COALESCE(SUM(total), 0) as omzet,
+                COALESCE(SUM(diskon), 0) as diskon
+            FROM transaksi
+            WHERE DATE(waktu) >= ? AND DATE(waktu) <= ?
+              AND COALESCE(status, 'aktif') = 'aktif'
+            GROUP BY DATE(waktu)
+            ORDER BY DATE(waktu) ASC
+        """, (dari, ke)).fetchall()
+            
+    elif tipe == 'mingguan':
+        # Default: 12 minggu terakhir
+        if not dari:
+            dari = (datetime.now() - timedelta(weeks=12)).strftime('%Y-%m-%d')
+        if not ke:
+            ke = datetime.now().strftime('%Y-%m-%d')
+            
+        if USE_POSTGRES:
+            rows = db_execute(conn, """
+                SELECT 
+                    DATE_TRUNC('week', waktu)::date || ' - ' || 
+                    (DATE_TRUNC('week', waktu) + interval '6 days')::date as label,
+                    EXTRACT(WEEK FROM waktu) as week_num,
+                    COUNT(*) as transaksi,
+                    COALESCE(SUM(total), 0) as omzet,
+                    COALESCE(SUM(diskon), 0) as diskon
+                FROM transaksi
+                WHERE DATE(waktu) >= ? AND DATE(waktu) <= ?
+                  AND COALESCE(status, 'aktif') = 'aktif'
+                GROUP BY DATE_TRUNC('week', waktu), EXTRACT(WEEK FROM waktu)
+                ORDER BY DATE_TRUNC('week', waktu) ASC
+            """, (dari, ke)).fetchall()
+        else:
+            rows = db_execute(conn, """
+                SELECT 
+                    strftime('%W', waktu) as week_num,
+                    'Minggu ' || strftime('%W', waktu) as label,
+                    COUNT(*) as transaksi,
+                    COALESCE(SUM(total), 0) as omzet,
+                    COALESCE(SUM(diskon), 0) as diskon
+                FROM transaksi
+                WHERE DATE(waktu) >= ? AND DATE(waktu) <= ?
+                  AND COALESCE(status, 'aktif') = 'aktif'
+                GROUP BY strftime('%W', waktu)
+                ORDER BY strftime('%W', waktu) ASC
+            """, (dari, ke)).fetchall()
+            
+    elif tipe == 'bulanan':
+        # Default: 12 bulan terakhir
+        if not dari:
+            dari = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+        if not ke:
+            ke = datetime.now().strftime('%Y-%m-%d')
+            
+        rows = db_execute(conn, """
+            SELECT 
+                strftime('%Y-%m', waktu) as label,
+                strftime('%m/%Y', waktu) as bulan,
+                COUNT(*) as transaksi,
+                COALESCE(SUM(total), 0) as omzet,
+                COALESCE(SUM(diskon), 0) as diskon
+            FROM transaksi
+            WHERE DATE(waktu) >= ? AND DATE(waktu) <= ?
+              AND COALESCE(status, 'aktif') = 'aktif'
+            GROUP BY strftime('%Y-%m', waktu)
+            ORDER BY strftime('%Y-%m', waktu) ASC
+        """, (dari, ke)).fetchall()
+    else:
+        conn.close()
+        return jsonify({'error': 'Tipe tidak valid'}), 400
+    
+    # Format data untuk Chart.js
+    labels = [r['label'] for r in rows]
+    data_transaksi = [r['transaksi'] for r in rows]
+    data_omzet = [r['omzet'] for r in rows]
+    data_diskon = [r['diskon'] for r in rows]
+    
+    conn.close()
+    return jsonify({
+        'tipe': tipe,
+        'labels': labels,
+        'datasets': {
+            'transaksi': data_transaksi,
+            'omzet': data_omzet,
+            'diskon': data_diskon
+        }
+    })
+
+
+# ─────────────────────────────────────
+#  API: EXPORT PDF LAPORAN
+# ─────────────────────────────────────
+@app.route('/api/export/pdf', methods=['GET'])
+@pemilik_required
+def export_pdf():
+    """Export laporan transaksi ke PDF."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+    except ImportError:
+        return jsonify({'error': 'Library reportlab tidak tersedia'}), 500
+    
+    dari = request.args.get('dari', '')
+    ke   = request.args.get('ke', '')
+    
+    conn = get_db()
+    
+    # Get transaksi data
+    sql = """
+        SELECT t.*, COALESCE(p.nama, '') AS pelanggan_nama
+        FROM transaksi t
+        LEFT JOIN pelanggan p ON p.id = t.pelanggan_id
+        WHERE COALESCE(t.status, 'aktif') = 'aktif'
+    """
+    params = []
+    if dari:
+        sql += " AND DATE(t.waktu) >= ?"
+        params.append(dari)
+    if ke:
+        sql += " AND DATE(t.waktu) <= ?"
+        params.append(ke)
+    sql += " ORDER BY t.waktu DESC LIMIT 500"
+    
+    transaksi = db_execute(conn, sql, params).fetchall()
+    
+    # Get summary stats
+    stats = db_execute(conn, f"""
+        SELECT 
+            COUNT(*) as total_transaksi,
+            COALESCE(SUM(total), 0) as total_omzet,
+            COALESCE(SUM(diskon), 0) as total_diskon,
+            COALESCE(AVG(total), 0) as rata_rata
+        FROM transaksi
+        WHERE COALESCE(status, 'aktif') = 'aktif'
+        {' AND DATE(waktu) >= ?' if dari else ''}
+        {' AND DATE(waktu) <= ?' if ke else ''}
+    """, [p for p in [dari, ke] if p]).fetchone()
+    
+    conn.close()
+    
+    # Create PDF
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=1.5*cm,
+        leftMargin=1.5*cm,
+        topMargin=1.5*cm,
+        bottomMargin=1.5*cm
+    )
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#f5a623'),
+        spaceAfter=20,
+        alignment=1  # Center
+    )
+    
+    # Title
+    periode = f"Periode: {dari or 'Awal'} s/d {ke or 'Sekarang'}"
+    elements.append(Paragraph("LAPORAN PENJUALAN", title_style))
+    elements.append(Paragraph(periode, styles['Normal']))
+    elements.append(Spacer(1, 20))
+    
+    # Summary table
+    summary_data = [
+        ['Ringkasan', ''],
+        ['Total Transaksi', str(stats['total_transaksi'])],
+        ['Total Omzet', f"Rp {stats['total_omzet']:,.0f}".replace(',', '.')],
+        ['Total Diskon', f"Rp {stats['total_diskon']:,.0f}".replace(',', '.')],
+        ['Rata-rata per Transaksi', f"Rp {stats['rata_rata']:,.0f}".replace(',', '.')]
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[doc.width/2]*2)
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f5a623')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#1a1d27')),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.white),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#2e3244')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 30))
+    
+    # Transaksi detail
+    if transaksi:
+        elements.append(Paragraph("Detail Transaksi", styles['Heading2']))
+        elements.append(Spacer(1, 10))
+        
+        detail_data = [['No', 'Waktu', 'No. Trx', 'Pelanggan', 'Item', 'Total', 'Metode']]
+        for i, t in enumerate(transaksi[:100], 1):  # Limit 100 for PDF
+            item_count = db_execute(conn, 
+                "SELECT COUNT(*) as c FROM transaksi_item WHERE transaksi_id=?", (t['id'],)
+            ).fetchone()['c']
+            detail_data.append([
+                str(i),
+                t['waktu'][:16],
+                t['no_trx'],
+                t['pelanggan_nama'] or '-',
+                f"{item_count} item",
+                f"Rp {t['total']:,.0f}".replace(',', '.'),
+                t.get('metode_bayar', 'tunai').upper()
+            ])
+        
+        detail_table = Table(detail_data, colWidths=[0.6*cm, 2.8*cm, 2.5*cm, 2.5*cm, 1.5*cm, 2.2*cm, 1.5*cm])
+        detail_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e3244')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#f5a623')),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#1a1d27')),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.white),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#2e3244')),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 5),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#1a1d27'), colors.HexColor('#242736')])
+        ]))
+        elements.append(detail_table)
+    
+    # Footer
+    elements.append(Spacer(1, 30))
+    footer_text = f"Dibuat pada: {datetime.now().strftime('%d %B %Y %H:%M')} oleh {get_current_user()['nama']}"
+    elements.append(Paragraph(footer_text, styles['Normal']))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    
+    filename = f"laporan-penjualan-{dari or 'semua'}-{ke or 'semua'}.pdf"
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=filename
+    )
 
 
 # ─────────────────────────────────────

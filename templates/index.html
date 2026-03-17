@@ -21,6 +21,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <!-- html5-qrcode untuk scan barcode (support lebih banyak browser) -->
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<!-- Chart.js untuk grafik penjualan -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>const APP_USER = {{ user | tojson }};</script>
 <style>
 :root{
@@ -526,6 +528,8 @@ html.light body{color-scheme:light;}
         <button onclick="closePgMenu();openImportExport()">📤 Import / Export</button>
         {% if user.role == 'pemilik' %}
         <hr>
+        <button onclick="closePgMenu();openBarcodeGenerator()">🏷️ Cetak Barcode</button>
+        <button onclick="closePgMenu();openStokLog()">📦 Riwayat Stok</button>
         <button onclick="closePgMenu();openPengguna()">👥 Tim</button>
         <button onclick="closePgMenu();openPengaturan()">🏪 Pengaturan Toko</button>
         {% endif %}
@@ -655,6 +659,8 @@ html.light body{color-scheme:light;}
       <button onclick="closeDrawer();openKelola()"><span class="dn-icon">⚙️</span>Kelola Produk</button>
       <button onclick="closeDrawer();openImportExport()"><span class="dn-icon">📤</span>Import / Export</button>
       {% if user.role == 'pemilik' %}
+      <button onclick="closeDrawer();openBarcodeGenerator()"><span class="dn-icon">🏷️</span>Cetak Barcode</button>
+      <button onclick="closeDrawer();openStokLog()"><span class="dn-icon">📦</span>Riwayat Stok</button>
       <button onclick="closeDrawer();openPengguna()"><span class="dn-icon">👥</span>Tim</button>
       <button onclick="closeDrawer();openPengaturan()"><span class="dn-icon">🏪</span>Pengaturan Toko</button>
       {% endif %}
@@ -748,9 +754,11 @@ html.light body{color-scheme:light;}
       </div>
       <div class="fg"><label>🔢 Barcode <span style="color:var(--muted);font-weight:400">(opsional, untuk scan)</span></label>
         <div style="display:flex;gap:8px;">
-          <input type="text" id="fBarcode" placeholder="Scan atau ketik barcode" style="flex:1;">
+          <input type="text" id="fBarcode" placeholder="Scan, ketik, atau generate barcode" style="flex:1;">
           <button type="button" class="mbtn" onclick="openBarcodeScannerForForm()" title="Scan barcode" style="padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;cursor:pointer;">📷 Scan</button>
+          <button type="button" class="mbtn" onclick="generateRandomBarcode()" title="Generate barcode otomatis" style="padding:8px 12px;background:var(--blue);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;">🎲 Generate</button>
         </div>
+        <small style="color:var(--muted);font-size:11px;">Klik 🎲 Generate untuk membuat barcode otomatis (12 digit)</small>
       </div>
     </div>
     <div class="fg"><label>Ikon Emoji</label><div class="epick" id="epick"></div></div>
@@ -800,9 +808,245 @@ html.light body{color-scheme:light;}
     <div class="date-filter">
       <label>Dari:</label><input type="date" id="rDari">
       <label>Ke:</label><input type="date" id="rKe">
+      <select id="rStatus" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:7px;font-family:var(--fb);font-size:12px;outline:none;cursor:pointer;">
+        <option value="">Semua Status</option>
+        <option value="aktif" selected>Aktif</option>
+        <option value="void">Void</option>
+      </select>
       <button onclick="muatRiwayat()">🔍 Filter</button>
     </div>
     <div id="rContent"></div>
+  </div>
+</div>
+
+<!-- MODAL VOID TRANSAKSI -->
+<div class="overlay" id="mVoidTrx">
+  <div class="mbox wide" style="text-align:left">
+    <div class="mtit">⚠️ Void Transaksi</div>
+    <div class="msub">Transaksi akan dibatalkan dan stok akan dikembalikan</div>
+    <div id="voidTrxInfo" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="color:var(--muted)">No. Transaksi:</span>
+        <span id="voidNoTrx" style="font-weight:700;">-</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+        <span style="color:var(--muted)">Total:</span>
+        <span id="voidTotal" style="font-weight:700;color:var(--accent);">-</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--muted)">Waktu:</span>
+        <span id="voidWaktu" style="font-weight:700;">-</span>
+      </div>
+    </div>
+    <input type="hidden" id="voidTrxId" value="">
+    <div class="fg">
+      <label>Alasan Void <span style="color:var(--red)">*</span></label>
+      <textarea id="voidReason" rows="3" placeholder="Contoh: Salah input, customer cancel, dll..." style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:8px;font-family:var(--fb);font-size:13px;outline:none;resize:vertical;"></textarea>
+    </div>
+    <div class="mac">
+      <button class="mbtn sec" onclick="closeM('mVoidTrx')">Batal</button>
+      <button class="mbtn" style="background:var(--red);color:#fff" onclick="prosesVoidTrx()">🗑 Void Transaksi</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETAIL TRANSAKSI -->
+<div class="overlay" id="mDetailTrx">
+  <div class="mbox wide" style="text-align:left">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="mtit" style="margin-bottom:0">📄 Detail Transaksi</div>
+      <button class="mbtn sec" style="flex:0;padding:5px 12px;font-size:11px" onclick="closeM('mDetailTrx')">✕</button>
+    </div>
+    <div id="detailTrxContent"></div>
+  </div>
+</div>
+
+<!-- MODAL ADJUST STOK -->
+<div class="overlay" id="mAdjustStok">
+  <div class="mbox wide" style="text-align:left">
+    <div class="mtit">⚖️ Adjust Stok Manual</div>
+    <div class="msub" id="adjustStokSub">Sesuaikan stok fisik dengan sistem</div>
+    <input type="hidden" id="adjustProdukId" value="">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <span id="adjustEmoji" style="font-size:32px;">📦</span>
+        <div>
+          <div id="adjustNamaProduk" style="font-size:15px;font-weight:700;">-</div>
+          <div id="adjustKategori" style="font-size:12px;color:var(--muted);">-</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;text-align:center;padding:10px;background:var(--surface);border-radius:8px;">
+          <div style="font-size:11px;color:var(--muted);">Stok Saat Ini</div>
+          <div id="adjustStokSaatIni" style="font-family:var(--fh);font-size:20px;font-weight:800;color:var(--accent);">-</div>
+        </div>
+        <div style="flex:1;text-align:center;padding:10px;background:var(--surface);border-radius:8px;">
+          <div style="font-size:11px;color:var(--muted);">Selisih</div>
+          <div id="adjustSelisih" style="font-family:var(--fh);font-size:20px;font-weight:800;color:var(--green);">-</div>
+        </div>
+      </div>
+    </div>
+    <div class="fr2">
+      <div class="fg">
+        <label>Stok Baru <span style="color:var(--red)">*</span></label>
+        <input type="number" id="adjustStokBaru" min="0" placeholder="0" oninput="hitungSelisihAdjust()">
+      </div>
+      <div class="fg">
+        <label>Alasan Adjust <span style="color:var(--red)">*</span></label>
+        <select id="adjustAlasan" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:8px;font-family:var(--fb);font-size:13px;outline:none;">
+          <option value="">Pilih alasan...</option>
+          <option value="stok_fisik">Stok Fisik Berbeda</option>
+          <option value="rusak">Barang Rusak/Hilang</option>
+          <option value="expired">Barang Expired</option>
+          <option value="penyesuaian">Penyesuaian Awal</option>
+          <option value="lainnya">Lainnya...</option>
+        </select>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Keterangan Tambahan</label>
+      <input type="text" id="adjustKeterangan" placeholder="Detail tambahan (opsional)...">
+    </div>
+    <div class="mac">
+      <button class="mbtn sec" onclick="closeM('mAdjustStok')">Batal</button>
+      <button class="mbtn pri" onclick="prosesAdjustStok()">💾 Simpan Adjust</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL STOK LOG / RIWAYAT PERUBAHAN STOK -->
+<div class="overlay" id="mStokLog">
+  <div class="mbox xl">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="mtit" style="margin-bottom:0">📦 Riwayat Perubahan Stok</div>
+      <button class="mbtn sec" style="flex:0;padding:5px 12px;font-size:11px" onclick="closeM('mStokLog')">✕</button>
+    </div>
+    <div class="date-filter">
+      <label>Dari:</label><input type="date" id="slDari">
+      <label>Ke:</label><input type="date" id="slKe">
+      <select id="slTipe" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:7px;font-family:var(--fb);font-size:12px;outline:none;cursor:pointer;">
+        <option value="">Semua Tipe</option>
+        <option value="masuk">Masuk</option>
+        <option value="keluar">Keluar</option>
+        <option value="adjust">Adjust</option>
+      </select>
+      <button onclick="muatStokLog()">🔍 Filter</button>
+    </div>
+    <div id="slContent"></div>
+  </div>
+</div>
+
+<!-- MODAL BARCODE GENERATOR -->
+<div class="overlay" id="mBarcodeGen">
+  <div class="mbox xl">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="mtit" style="margin-bottom:0">🏷️ Cetak Barcode</div>
+      <button class="mbtn sec" style="flex:0;padding:5px 12px;font-size:11px" onclick="closeM('mBarcodeGen')">✕</button>
+    </div>
+    
+    <!-- Filter & Actions -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <input type="text" id="barcodeFilter" placeholder="🔍 Cari produk..." 
+        style="flex:1;min-width:150px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:13px;"
+        oninput="filterBarcodeList()">
+      <select id="barcodeKatFilter" onchange="filterBarcodeList()"
+        style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:8px;font-size:13px;min-width:120px;">
+        <option value="">Semua Kategori</option>
+      </select>
+      <button class="mbtn grn" onclick="generateBarcodeSheet()">📄 Generate Sheet PDF</button>
+    </div>
+    
+    <!-- Pilih semua -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:var(--surface2);border-radius:8px;">
+      <input type="checkbox" id="selectAllBarcode" onchange="toggleSelectAllBarcode()" style="width:18px;height:18px;cursor:pointer;">
+      <label for="selectAllBarcode" style="cursor:pointer;font-size:13px;font-weight:600;">Pilih Semua Produk yang Memiliki Barcode</label>
+      <span id="barcodeSelectedCount" style="margin-left:auto;font-size:12px;color:var(--muted);">0 dipilih</span>
+    </div>
+    
+    <!-- List produk -->
+    <div id="barcodeList" style="max-height:400px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;">
+      <div style="text-align:center;color:var(--muted);padding:24px;">Memuat...</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW BARCODE -->
+<div class="overlay" id="mBarcodePreview">
+  <div class="mbox" style="text-align:center;max-width:350px;">
+    <div class="mtit">🏷️ Preview Barcode</div>
+    <div class="msub" id="barcodePreviewTitle">-</div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:20px;margin:16px 0;">
+      <img id="barcodePreviewImg" src="" alt="Barcode" style="max-width:100%;height:auto;">
+      <div id="barcodePreviewCode" style="font-family:var(--fh);font-size:16px;font-weight:700;margin-top:10px;letter-spacing:2px;">-</div>
+    </div>
+    <div class="mac">
+      <button class="mbtn sec" onclick="closeM('mBarcodePreview')">Tutup</button>
+      <a id="barcodeDownloadLink" href="#" download class="mbtn pri" style="text-decoration:none;">⬇️ Download</a>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SHARE STRUK -->
+<div class="overlay" id="mShareStruk">
+  <div class="mbox" style="text-align:center;max-width:400px;">
+    <div class="mtit">📤 Bagikan Struk</div>
+    <div class="msub">Pilih cara untuk membagikan struk</div>
+    
+    <!-- Preview struk mini -->
+    <div id="shareStrukPreview" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:15px;margin:16px 0;text-align:left;font-size:12px;max-height:150px;overflow-y:auto;">
+      <div style="text-align:center;color:var(--muted);">Memuat...</div>
+    </div>
+    
+    <!-- Share Options Grid -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0;">
+      <!-- WhatsApp -->
+      <button onclick="shareToApp('whatsapp')" style="background:#25D366;border:none;border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <span style="font-size:28px;">💬</span>
+        <span style="font-size:11px;color:#fff;font-weight:600;">WhatsApp</span>
+      </button>
+      
+      <!-- Telegram -->
+      <button onclick="shareToApp('telegram')" style="background:#0088cc;border:none;border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <span style="font-size:28px;">✈️</span>
+        <span style="font-size:11px;color:#fff;font-weight:600;">Telegram</span>
+      </button>
+      
+      <!-- Instagram -->
+      <button onclick="shareToApp('instagram')" style="background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);border:none;border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <span style="font-size:28px;">📷</span>
+        <span style="font-size:11px;color:#fff;font-weight:600;">Instagram</span>
+      </button>
+      
+      <!-- Email -->
+      <button onclick="shareToApp('email')" style="background:#EA4335;border:none;border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <span style="font-size:28px;">✉️</span>
+        <span style="font-size:11px;color:#fff;font-weight:600;">Email</span>
+      </button>
+      
+      <!-- RawBT Print -->
+      <button onclick="shareToApp('rawbt')" style="background:#2d7d32;border:none;border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <span style="font-size:28px;">🖨️</span>
+        <span style="font-size:11px;color:#fff;font-weight:600;">RawBT</span>
+      </button>
+      
+      <!-- Download Image -->
+      <button onclick="shareToApp('download')" style="background:var(--accent);border:none;border-radius:12px;padding:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">
+        <span style="font-size:28px;">💾</span>
+        <span style="font-size:11px;color:#111;font-weight:600;">Simpan</span>
+      </button>
+    </div>
+    
+    <!-- Copy text option -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Atau salin teks struk:</div>
+      <button class="mbtn" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);" onclick="copyStrukText()">
+        📋 Salin Teks Struk
+      </button>
+    </div>
+    
+    <div class="mac">
+      <button class="mbtn sec" onclick="closeM('mShareStruk')" style="flex:1;">Batal</button>
+    </div>
   </div>
 </div>
 
@@ -818,8 +1062,9 @@ html.light body{color-scheme:light;}
       <button class="lap-tab active" id="lapTab0" onclick="switchLapTab(0)">📊 Ringkasan</button>
       <button class="lap-tab" id="lapTab1" onclick="switchLapTab(1)">🏆 Terlaris</button>
       <button class="lap-tab" id="lapTab2" onclick="switchLapTab(2)">⚠️ Stok Rendah</button>
+      <button class="lap-tab" id="lapTab3" onclick="switchLapTab(3)">📈 Grafik</button>
     </div>
-    <!-- Filter tanggal (hanya untuk tab 0 dan 1) -->
+    <!-- Filter tanggal (hanya untuk tab 0, 1, dan 3) -->
     <div class="date-filter" id="lapDateFilter">
       <label>Dari:</label><input type="date" id="lDari">
       <label>Ke:</label><input type="date" id="lKe">
@@ -828,8 +1073,20 @@ html.light body{color-scheme:light;}
     <div id="lapContent"></div>
     <div id="lapTopContent" style="display:none;"></div>
     <div id="lapStokContent" style="display:none;"></div>
+    <div id="lapChartContent" style="display:none;">
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="lap-tab" id="chartTabHarian" onclick="switchChartTab('harian')">📅 Harian</button>
+        <button class="lap-tab" id="chartTabMingguan" onclick="switchChartTab('mingguan')">📆 Mingguan</button>
+        <button class="lap-tab" id="chartTabBulanan" onclick="switchChartTab('bulanan')">📊 Bulanan</button>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+        <canvas id="salesChart" style="max-height:300px;"></canvas>
+      </div>
+      <div id="chartStats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;"></div>
+    </div>
     <div class="mac" style="margin-top:12px">
       <button class="mbtn grn" id="lapExportBtn" onclick="exportCSV()">⬇️ Export CSV</button>
+      <button class="mbtn" style="background:var(--red);color:#fff" onclick="exportPDF()">📄 Export PDF</button>
       <button class="mbtn sec" onclick="closeM('mLaporan')">Tutup</button>
     </div>
   </div>
@@ -1826,24 +2083,338 @@ function renderPrintButtons() {
   if (!el) return;
   const isAndroid = /Android/i.test(navigator.userAgent);
   const hasSerial = 'serial' in navigator;
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const canShare = navigator.share !== undefined;
 
-  let html = `<button class="mbtn sec" onclick="cetakStruk()">🖨️ Cetak</button>`;
+  let html = '';
+  
+  // Row 1: Print options
+  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:10px;">`;
+  html += `<button class="mbtn sec" onclick="cetakStruk()">🖨️ Cetak</button>`;
 
   if (isAndroid) {
-    html += `<button class="mbtn" style="background:#2d7d32;color:#fff"
+    html += `<button class="mbtn" style="background:#2d7d32;color:#fff;font-size:11px;padding:8px 12px;"
                title="Print langsung ke printer Bluetooth via RawBT"
                onclick="printRawBT()">📱 RawBT</button>`;
   }
   if (hasSerial) {
-    html += `<button class="mbtn" style="background:#6a1b9a;color:#fff"
+    html += `<button class="mbtn" style="background:#6a1b9a;color:#fff;font-size:11px;padding:8px 12px;"
                title="Print via USB/COM Port (Chrome desktop)"
-               onclick="printSerial()">🔌 Serial/USB</button>`;
+               onclick="printSerial()">🔌 USB</button>`;
   }
-
-  html += `<button class="mbtn" style="background:var(--blue);color:#fff"
-             onclick="bagikanStruk()">📤 PDF</button>`;
-  html += `<button class="mbtn grn" onclick="closeM('mSukses')">✅ Selesai</button>`;
+  html += `</div>`;
+  
+  // Row 2: Share options
+  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:10px;">`;
+  
+  // Share Button (opens modal)
+  html += `<button class="mbtn" style="background:#25D366;color:#fff;font-size:11px;padding:8px 12px;"
+             onclick="openShareModal()">📤 Share</button>`;
+  
+  // Share PDF
+  html += `<button class="mbtn" style="background:var(--blue);color:#fff;font-size:11px;padding:8px 12px;"
+             onclick="bagikanStruk()">📄 PDF</button>`;
+  
+  // Native Share (Web Share API) - untuk mobile
+  if (canShare) {
+    html += `<button class="mbtn" style="background:#FF6B6B;color:#fff;font-size:11px;padding:8px 12px;"
+               onclick="nativeShareStruk()">🔗 Share...</button>`;
+  }
+  
+  html += `</div>`;
+  
+  // Row 3: Action done
+  html += `<div style="display:flex;gap:6px;justify-content:center;">`;
+  html += `<button class="mbtn grn" onclick="closeM('mSukses')" style="flex:1;max-width:200px;">✅ Selesai</button>`;
+  html += `</div>`;
+  
   el.innerHTML = html;
+}
+
+// ══════════════════════════════════
+//  SHARE STRUK DIGITAL
+// ══════════════════════════════════
+async function shareStrukImage(app) {
+  if (!lastTrx) return;
+  showLoading(true);
+  
+  try {
+    // Generate struk image
+    const res = await fetch(`/api/struk/${lastTrx.id}/image`);
+    if (!res.ok) throw new Error('Gagal generate struk image');
+    
+    const blob = await res.blob();
+    const file = new File([blob], `struk-${lastTrx.no_trx}.png`, { type: 'image/png' });
+    
+    // Check if Web Share API with files is supported
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: `Struk ${lastTrx.no_trx}`,
+          text: `Transaksi di ${toko.nama_toko || 'Toko'} - Total: ${fRp(lastTrx.total)}`,
+          files: [file]
+        });
+        showToast('✅ Struk dibagikan');
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          // Fallback: download file
+          downloadBlob(blob, `struk-${lastTrx.no_trx}.png`);
+        }
+      }
+    } else {
+      // Fallback: download
+      downloadBlob(blob, `struk-${lastTrx.no_trx}.png`);
+      
+      // Show instructions based on app
+      let appName = 'aplikasi';
+      let url = '';
+      
+      switch(app) {
+        case 'whatsapp':
+          appName = 'WhatsApp';
+          url = 'https://wa.me/';
+          break;
+        case 'telegram':
+          appName = 'Telegram';
+          url = 'https://t.me/share/url';
+          break;
+        case 'instagram':
+          appName = 'Instagram';
+          break;
+      }
+      
+      showToast(`📎 Gambar struk didownload. Buka ${appName} untuk membagikan.`);
+      
+      // Open app if URL available
+      if (url && app === 'whatsapp') {
+        setTimeout(() => {
+          window.open(url, '_blank');
+        }, 1000);
+      }
+    }
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  
+  showLoading(false);
+}
+
+async function nativeShareStruk() {
+  if (!lastTrx) return;
+  
+  const shareData = {
+    title: `Struk ${lastTrx.no_trx}`,
+    text: `Transaksi di ${toko.nama_toko || 'Toko'}\n` +
+          `No: ${lastTrx.no_trx}\n` +
+          `Total: ${fRp(lastTrx.total)}\n` +
+          `Bayar: ${fRp(lastTrx.bayar)}\n` +
+          `Kembalian: ${fRp(lastTrx.kembalian)}`,
+    url: window.location.href
+  };
+  
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData);
+      showToast('✅ Struk dibagikan');
+    } else {
+      // Fallback: copy to clipboard
+      copyStrukText();
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      copyStrukText();
+    }
+  }
+}
+
+function copyStrukText() {
+  if (!lastTrx) return;
+  
+  const text = `*STRUK ${toko.nama_toko || 'TOKO'}*\n` +
+               `No: ${lastTrx.no_trx}\n` +
+               `Waktu: ${new Date(lastTrx.waktu).toLocaleString('id-ID')}\n\n` +
+               lastTrx.items.map(i => `${i.nama_produk} x${i.qty} = ${fRp(i.subtotal)}`).join('\n') +
+               `\n\n*Total: ${fRp(lastTrx.total)}*\n` +
+               `Bayar: ${fRp(lastTrx.bayar)}\n` +
+               `Kembali: ${fRp(lastTrx.kembalian)}\n\n` +
+               `Terima kasih!`;
+  
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('✅ Teks struk disalin ke clipboard');
+  }).catch(() => {
+    showToast('❌ Gagal menyalin teks');
+  });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════
+//  SHARE STRUK LENGKAP
+// ══════════════════════════════════
+function openShareModal() {
+  if (!lastTrx) return;
+  
+  // Render preview
+  const previewEl = document.getElementById('shareStrukPreview');
+  previewEl.innerHTML = `
+    <div style="text-align:center;margin-bottom:8px;">
+      <strong style="color:var(--accent);">${toko.nama_toko || 'TOKO'}</strong>
+    </div>
+    <div style="color:var(--muted);text-align:center;font-size:10px;margin-bottom:10px;">
+      ${lastTrx.no_trx} · ${new Date(lastTrx.waktu).toLocaleString('id-ID')}
+    </div>
+    <div style="border-top:1px dashed var(--border);border-bottom:1px dashed var(--border);padding:8px 0;margin:8px 0;">
+      ${lastTrx.items.map(i => `
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span>${i.nama_produk} x${i.qty}</span>
+          <span>${fRp(i.subtotal)}</span>
+        </div>
+      `).join('')}
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:16px;font-weight:700;color:var(--accent);">Total: ${fRp(lastTrx.total)}</div>
+      <div style="font-size:11px;color:var(--muted);">Bayar: ${fRp(lastTrx.bayar)} · Kembali: ${fRp(lastTrx.kembalian)}</div>
+    </div>
+  `;
+  
+  openM('mShareStruk');
+}
+
+async function shareToApp(app) {
+  if (!lastTrx) return;
+  
+  showLoading(true);
+  
+  try {
+    switch(app) {
+      case 'whatsapp':
+        await shareToWhatsApp();
+        break;
+      case 'telegram':
+        await shareToTelegram();
+        break;
+      case 'instagram':
+        await shareToInstagram();
+        break;
+      case 'email':
+        shareToEmail();
+        break;
+      case 'rawbt':
+        printRawBT();
+        closeM('mShareStruk');
+        break;
+      case 'download':
+        await downloadStrukImage();
+        break;
+    }
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  
+  showLoading(false);
+}
+
+async function shareToWhatsApp() {
+  // Generate image
+  const res = await fetch(`/api/struk/${lastTrx.id}/image`);
+  const blob = await res.blob();
+  
+  // Try Web Share API first
+  const file = new File([blob], `struk-${lastTrx.no_trx}.png`, { type: 'image/png' });
+  
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({
+      title: `Struk ${lastTrx.no_trx}`,
+      files: [file]
+    });
+    closeM('mShareStruk');
+  } else {
+    // Fallback: download then open WA
+    downloadBlob(blob, `struk-${lastTrx.no_trx}.png`);
+    
+    // Open WhatsApp
+    const text = encodeURIComponent(`Struk ${lastTrx.no_trx} - Total: ${fRp(lastTrx.total)}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+    
+    showToast('📎 Gambar didownload. Silakan lampirkan di WhatsApp.');
+    closeM('mShareStruk');
+  }
+}
+
+async function shareToTelegram() {
+  const text = encodeURIComponent(
+    `*STRUK ${toko.nama_toko || 'TOKO'}*\n\n` +
+    `No: ${lastTrx.no_trx}\n` +
+    `Waktu: ${new Date(lastTrx.waktu).toLocaleString('id-ID')}\n\n` +
+    `*Item:*\n` +
+    lastTrx.items.map(i => `• ${i.nama_produk} x${i.qty} = ${fRp(i.subtotal)}`).join('\n') +
+    `\n\n*Total: ${fRp(lastTrx.total)}*\n` +
+    `Bayar: ${fRp(lastTrx.bayar)}\n` +
+    `Kembali: ${fRp(lastTrx.kembalian)}\n\n` +
+    `_Terima kasih telah berbelanja!_`
+  );
+  
+  window.open(`https://t.me/share/url?url=&text=${text}`, '_blank');
+  closeM('mShareStruk');
+}
+
+async function shareToInstagram() {
+  // Instagram tidak support sharing dari web directly
+  // Download image dan instruksikan user untuk upload ke IG
+  const res = await fetch(`/api/struk/${lastTrx.id}/image`);
+  const blob = await res.blob();
+  downloadBlob(blob, `struk-${lastTrx.no_trx}.png`);
+  
+  showToast('📎 Gambar struk disimpan. Buka Instagram untuk membagikan.');
+  
+  // Try to open Instagram app
+  setTimeout(() => {
+    window.location.href = 'instagram://camera';
+  }, 1000);
+  
+  closeM('mShareStruk');
+}
+
+function shareToEmail() {
+  const subject = encodeURIComponent(`Struk Transaksi ${lastTrx.no_trx} - ${toko.nama_toko || 'Toko'}`);
+  const body = encodeURIComponent(
+    `Yth. Pelanggan,\n\n` +
+    `Berikut adalah detail transaksi Anda:\n\n` +
+    `No Transaksi: ${lastTrx.no_trx}\n` +
+    `Tanggal: ${new Date(lastTrx.waktu).toLocaleString('id-ID')}\n` +
+    `Toko: ${toko.nama_toko || 'Toko'}\n` +
+    `Alamat: ${toko.alamat || '-'}\n\n` +
+    `--- Detail Pembelian ---\n\n` +
+    lastTrx.items.map(i => `${i.nama_produk} x${i.qty} @ ${fRp(i.harga)} = ${fRp(i.subtotal)}`).join('\n') +
+    `\n\nSubtotal: ${fRp(lastTrx.subtotal)}\n` +
+    (lastTrx.diskon > 0 ? `Diskon: -${fRp(lastTrx.diskon)}\n` : '') +
+    `TOTAL: ${fRp(lastTrx.total)}\n` +
+    `Bayar: ${fRp(lastTrx.bayar)}\n` +
+    `Kembalian: ${fRp(lastTrx.kembalian)}\n\n` +
+    `---\n` +
+    `Terima kasih telah berbelanja!\n` +
+    `${toko.pesan_struk || ''}`
+  );
+  
+  window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+  closeM('mShareStruk');
+}
+
+async function downloadStrukImage() {
+  const res = await fetch(`/api/struk/${lastTrx.id}/image`);
+  const blob = await res.blob();
+  downloadBlob(blob, `struk-${lastTrx.no_trx}.png`);
+  showToast('✅ Gambar struk disimpan');
+  closeM('mShareStruk');
 }
 
 // ══════════════════════════════════
@@ -2200,6 +2771,24 @@ function openTambah() {
   openM('mProduk');
 }
 
+function generateRandomBarcode() {
+  // Generate 12 digit random barcode (compatible dengan EAN13)
+  const prefix = '2'; // 2 adalah prefix untuk internal use
+  const random = Math.floor(Math.random() * 10000000000).toString().padStart(10, '0');
+  const code12 = prefix + random;
+  
+  // Calculate EAN13 check digit
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(code12[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  const code13 = code12 + checkDigit;
+  
+  document.getElementById('fBarcode').value = code13;
+  showToast('✅ Barcode generated: ' + code13);
+}
+
 async function simpanProduk() {
   const nama       = document.getElementById('fNama').value.trim();
   const kat        = document.getElementById('fKat').value.trim();
@@ -2324,7 +2913,15 @@ function _renderKelolaList(list) {
         data-stok="${p.stok}" data-emoji="${encodeURIComponent(p.emoji||'📦')}"
         data-hmodal="${p.harga_modal||0}" data-stokmin="${p.stok_min||0}" data-diskon="${p.diskon||0}"
         onclick="editProdukEl(this)">✏️ Edit</button>
-      ${APP_USER && APP_USER.role === 'pemilik' ? `<button class="bdl" data-id="${p.id}" data-nama="${encodeURIComponent(p.nama)}" onclick="hapusProdukEl(this)">🗑</button>` : ''}
+      ${APP_USER && APP_USER.role === 'pemilik' ? `
+        <button class="bed" style="border-color:var(--purple);color:var(--purple);" 
+          data-id="${p.id}" data-nama="${encodeURIComponent(p.nama)}" data-kat="${encodeURIComponent(p.kategori)}"
+          data-stok="${p.stok}" data-emoji="${encodeURIComponent(p.emoji||'📦')}"
+          onclick="adjustStokEl(this)">⚖️ Stok</button>
+        ${p.barcode ? `<button class="bed" style="border-color:var(--green);color:var(--green);" 
+          onclick="quickPreviewBarcode('${p.barcode}', '${encodeURIComponent(p.nama)}')">🏷️</button>` : ''}
+        <button class="bdl" data-id="${p.id}" data-nama="${encodeURIComponent(p.nama)}" onclick="hapusProdukEl(this)">🗑</button>
+      ` : ''}
     </div>`;
   }).join('');
 }
@@ -2346,6 +2943,48 @@ function editProdukEl(el) {
 
 async function hapusProdukEl(el) {
   hapusProduk(el.dataset.id, decodeURIComponent(el.dataset.nama));
+}
+
+function adjustStokEl(el) {
+  const produk = {
+    id: parseInt(el.dataset.id),
+    nama: decodeURIComponent(el.dataset.nama),
+    kategori: decodeURIComponent(el.dataset.kat),
+    stok: parseInt(el.dataset.stok),
+    emoji: decodeURIComponent(el.dataset.emoji)
+  };
+  openAdjustStok(produk);
+}
+
+async function quickPreviewBarcode(barcode, namaEncoded) {
+  const nama = decodeURIComponent(namaEncoded);
+  showLoading(true);
+  try {
+    const res = await fetch('/api/barcode/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: barcode, format: 'code128'})
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Gagal generate barcode');
+    }
+    
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    
+    document.getElementById('barcodePreviewTitle').textContent = nama;
+    document.getElementById('barcodePreviewImg').src = url;
+    document.getElementById('barcodePreviewCode').textContent = barcode;
+    document.getElementById('barcodeDownloadLink').href = url;
+    document.getElementById('barcodeDownloadLink').download = `barcode-${barcode}.png`;
+    
+    openM('mBarcodePreview');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
 }
 
 function editProduk(id, nama, kat, harga, stok, emoji, hmodal=0, stokmin=0, diskon=0, barcode='') {
@@ -2383,10 +3022,11 @@ async function hapusProduk(id, nama) {
 async function openRiwayat() { openM('mRiwayat'); await muatRiwayat(); }
 
 async function muatRiwayat() {
-  const dari = document.getElementById('rDari').value;
-  const ke   = document.getElementById('rKe').value;
+  const dari   = document.getElementById('rDari').value;
+  const ke     = document.getElementById('rKe').value;
+  const status = document.getElementById('rStatus').value;
   showLoading(true);
-  const list = await api(`/api/transaksi?dari=${dari}&ke=${ke}&limit=50`);
+  const list = await api(`/api/transaksi?dari=${dari}&ke=${ke}&status=${status}&limit=50`);
   const el = document.getElementById('rContent');
   if (!list.length) {
     el.innerHTML='<div style="color:var(--muted);text-align:center;padding:24px;font-size:14px">Tidak ada transaksi di periode ini</div>';
@@ -2394,6 +3034,8 @@ async function muatRiwayat() {
   }
   const omzet = list.reduce((s,r)=>s+r.total,0);
   const itmCnt = list.reduce((s,r)=>s+r.items.reduce((ss,i)=>ss+i.qty,0),0);
+  const isPemilik = APP_USER && APP_USER.role === 'pemilik';
+  
   el.innerHTML=`
     <div class="rstat">
       <div class="rsg">
@@ -2403,15 +3045,497 @@ async function muatRiwayat() {
       </div>
     </div>
     <div style="max-height:360px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;">
-    ${list.map(r=>`
-      <div class="ri">
-        <div class="rim">${r.no_trx} — ${new Date(r.waktu).toLocaleString('id-ID')}${r.pelanggan_nama ? ` · 👤 ${r.pelanggan_nama}` : ''}</div>
-        <div style="font-size:12px;color:var(--muted)">${r.items.map(i=>`${i.emoji} ${i.nama_produk} ×${i.qty}`).join(', ')}</div>
-        <div style="display:flex;justify-content:space-between;margin-top:4px">
-          <div class="rit">${fRp(r.total)}</div>
-          <span style="font-size:11px;color:var(--green)">Kembalian ${fRp(r.kembalian)}</span>
+    ${list.map(r=>{
+      const isVoid = r.status === 'void';
+      const voidBadge = isVoid ? `<span style="background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;">VOID</span>` : '';
+      const voidInfo = isVoid ? `<div style="font-size:11px;color:var(--red);margin-top:4px;">🗑 ${r.void_by} · ${r.void_reason}</div>` : '';
+      const actions = (isPemilik && !isVoid) ? `
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="mbtn" style="flex:1;padding:6px 12px;font-size:11px;background:var(--surface2);" onclick="lihatDetailTrx(${r.id})">📄 Detail</button>
+          <button class="mbtn" style="flex:1;padding:6px 12px;font-size:11px;background:var(--red);color:#fff;" onclick="bukaVoidTrx(${r.id}, '${r.no_trx}', ${r.total}, '${r.waktu}')">🗑 Void</button>
         </div>
-      </div>`).join('')}
+      ` : (isPemilik && isVoid) ? `
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="mbtn" style="flex:1;padding:6px 12px;font-size:11px;background:var(--surface2);" onclick="lihatDetailTrx(${r.id})">📄 Detail</button>
+          <button class="mbtn" style="flex:1;padding:6px 12px;font-size:11px;background:var(--green);color:#111;" onclick="restoreTrx(${r.id})">↩️ Restore</button>
+        </div>
+      ` : `
+        <div style="margin-top:8px;">
+          <button class="mbtn" style="width:100%;padding:6px 12px;font-size:11px;background:var(--surface2);" onclick="lihatDetailTrx(${r.id})">📄 Lihat Detail</button>
+        </div>
+      `;
+      return `
+      <div class="ri" style="${isVoid?'opacity:0.6;border-left:3px solid var(--red);':''}">
+        <div class="rim">${r.no_trx}${voidBadge} — ${new Date(r.waktu).toLocaleString('id-ID')}${r.pelanggan_nama ? ` · 👤 ${r.pelanggan_nama}` : ''}</div>
+        <div style="font-size:12px;color:var(--muted);text-decoration:${isVoid?'line-through':''}">${r.items.map(i=>`${i.emoji} ${i.nama_produk} ×${i.qty}`).join(', ')}</div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px">
+          <div class="rit" style="${isVoid?'text-decoration:line-through;color:var(--muted);':''}">${fRp(r.total)}</div>
+          <span style="font-size:11px;color:var(--green);${isVoid?'text-decoration:line-through;':''}">Kembalian ${fRp(r.kembalian)}</span>
+        </div>
+        ${voidInfo}
+        ${actions}
+      </div>`;
+    }).join('')}
+    </div>`;
+  showLoading(false);
+}
+
+// ══════════════════════════════════
+//  VOID TRANSAKSI
+// ══════════════════════════════════
+function bukaVoidTrx(id, noTrx, total, waktu) {
+  document.getElementById('voidTrxId').value = id;
+  document.getElementById('voidNoTrx').textContent = noTrx;
+  document.getElementById('voidTotal').textContent = fRp(total);
+  document.getElementById('voidWaktu').textContent = new Date(waktu).toLocaleString('id-ID');
+  document.getElementById('voidReason').value = '';
+  openM('mVoidTrx');
+}
+
+async function prosesVoidTrx() {
+  const id = document.getElementById('voidTrxId').value;
+  const reason = document.getElementById('voidReason').value.trim();
+  
+  if (!reason) {
+    showToast('⚠️ Alasan void wajib diisi');
+    return;
+  }
+  
+  if (!confirm('Yakin ingin void transaksi ini? Stok akan dikembalikan.')) return;
+  
+  showLoading(true);
+  try {
+    await api(`/api/transaksi/${id}/void`, 'POST', { reason });
+    showToast('✅ Transaksi berhasil di-void');
+    closeM('mVoidTrx');
+    await muatRiwayat();
+    await muatProduk(); // Refresh stok
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function restoreTrx(id) {
+  if (!confirm('Yakin ingin mengembalikan (restore) transaksi ini? Stok akan dikurangi kembali.')) return;
+  
+  showLoading(true);
+  try {
+    await api(`/api/transaksi/${id}/restore`, 'POST', {});
+    showToast('✅ Transaksi berhasil di-restore');
+    await muatRiwayat();
+    await muatProduk(); // Refresh stok
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function lihatDetailTrx(id) {
+  showLoading(true);
+  try {
+    const trx = await api(`/api/transaksi/${id}`);
+    const isVoid = trx.status === 'void';
+    const statusBadge = isVoid 
+      ? `<span style="background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;">VOID</span>`
+      : `<span style="background:var(--green);color:#111;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;">AKTIF</span>`;
+    
+    document.getElementById('detailTrxContent').innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div>
+            <div style="font-family:var(--fh);font-size:16px;font-weight:800;">${trx.no_trx}</div>
+            <div style="font-size:12px;color:var(--muted);">${new Date(trx.waktu).toLocaleString('id-ID')}</div>
+          </div>
+          ${statusBadge}
+        </div>
+        ${trx.pelanggan_nama ? `<div style="font-size:13px;margin-bottom:8px;">👤 ${trx.pelanggan_nama}</div>` : ''}
+        <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
+          ${trx.items.map(i=>`
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);">
+              <div>
+                <span style="font-size:16px;margin-right:6px;">${i.emoji}</span>
+                <span>${i.nama_produk} × ${i.qty}</span>
+              </div>
+              <span style="font-weight:600;">${fRp(i.subtotal)}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <span style="color:var(--muted);">Subtotal</span>
+            <span>${fRp(trx.subtotal)}</span>
+          </div>
+          ${trx.diskon > 0 ? `
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <span style="color:var(--muted);">Diskon</span>
+            <span style="color:var(--green);">-${fRp(trx.diskon)}</span>
+          </div>` : ''}
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-weight:700;">
+            <span>TOTAL</span>
+            <span style="color:var(--accent);">${fRp(trx.total)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <span style="color:var(--muted);">Bayar (${trx.metode_bayar || 'tunai'})</span>
+            <span>${fRp(trx.bayar)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="color:var(--muted);">Kembalian</span>
+            <span style="color:var(--green);">${fRp(trx.kembalian)}</span>
+          </div>
+        </div>
+        ${isVoid ? `
+        <div style="margin-top:12px;padding:10px;background:rgba(255,92,92,0.1);border-radius:8px;border-left:3px solid var(--red);">
+          <div style="font-size:12px;color:var(--red);font-weight:700;margin-bottom:4px;">🗑 Transaksi Dibatalkan</div>
+          <div style="font-size:11px;color:var(--muted);">Oleh: ${trx.void_by}</div>
+          <div style="font-size:11px;color:var(--muted);">Waktu: ${new Date(trx.void_at).toLocaleString('id-ID')}</div>
+          <div style="font-size:11px;color:var(--text);margin-top:4px;">Alasan: ${trx.void_reason}</div>
+        </div>
+        ` : ''}
+      </div>
+    `;
+    openM('mDetailTrx');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+// ══════════════════════════════════
+//  ADJUST STOK MANUAL
+// ══════════════════════════════════
+let adjustCurrentStok = 0;
+let adjustCurrentProduk = null;
+
+function openAdjustStok(produk) {
+  adjustCurrentProduk = produk;
+  adjustCurrentStok = produk.stok;
+  
+  document.getElementById('adjustProdukId').value = produk.id;
+  document.getElementById('adjustEmoji').textContent = produk.emoji || '📦';
+  document.getElementById('adjustNamaProduk').textContent = produk.nama;
+  document.getElementById('adjustKategori').textContent = produk.kategori;
+  document.getElementById('adjustStokSaatIni').textContent = produk.stok;
+  document.getElementById('adjustStokBaru').value = produk.stok;
+  document.getElementById('adjustAlasan').value = '';
+  document.getElementById('adjustKeterangan').value = '';
+  
+  hitungSelisihAdjust();
+  openM('mAdjustStok');
+}
+
+function hitungSelisihAdjust() {
+  const baru = parseInt(document.getElementById('adjustStokBaru').value) || 0;
+  const selisih = baru - adjustCurrentStok;
+  const el = document.getElementById('adjustSelisih');
+  
+  if (selisih === 0) {
+    el.textContent = '-';
+    el.style.color = 'var(--muted)';
+  } else if (selisih > 0) {
+    el.textContent = '+' + selisih;
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = selisih;
+    el.style.color = 'var(--red)';
+  }
+}
+
+async function prosesAdjustStok() {
+  const id = document.getElementById('adjustProdukId').value;
+  const stokBaru = parseInt(document.getElementById('adjustStokBaru').value);
+  const alasan = document.getElementById('adjustAlasan').value;
+  const keterangan = document.getElementById('adjustKeterangan').value.trim();
+  
+  if (isNaN(stokBaru) || stokBaru < 0) {
+    showToast('⚠️ Stok baru tidak valid');
+    return;
+  }
+  if (stokBaru === adjustCurrentStok) {
+    showToast('⚠️ Tidak ada perubahan stok');
+    return;
+  }
+  if (!alasan) {
+    showToast('⚠️ Pilih alasan adjust');
+    return;
+  }
+  
+  showLoading(true);
+  try {
+    await api(`/api/produk/${id}/adjust-stok`, 'POST', {
+      stok_baru: stokBaru,
+      alasan: alasan,
+      keterangan: keterangan
+    });
+    showToast('✅ Stok berhasil di-adjust');
+    closeM('mAdjustStok');
+    await muatProduk();
+    // Refresh kelola list jika terbuka
+    if (kelolaData.length) {
+      await openKelola();
+    }
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+// ══════════════════════════════════
+//  BARCODE GENERATOR
+// ══════════════════════════════════
+let barcodeData = [];
+let selectedBarcodeItems = new Set();
+
+async function openBarcodeGenerator() {
+  openM('mBarcodeGen');
+  await muatBarcodeList();
+}
+
+async function muatBarcodeList() {
+  showLoading(true);
+  try {
+    // Ambil semua produk yang punya barcode
+    const produk = await api('/api/produk?limit=2000');
+    barcodeData = produk.filter(p => p.barcode && p.barcode.trim() !== '');
+    
+    // Populate kategori filter
+    const kats = [...new Set(barcodeData.map(p => p.kategori))].sort();
+    const katSelect = document.getElementById('barcodeKatFilter');
+    katSelect.innerHTML = '<option value="">Semua Kategori</option>' + 
+      kats.map(k => `<option value="${k}">${k}</option>`).join('');
+    
+    selectedBarcodeItems.clear();
+    updateBarcodeSelection();
+    renderBarcodeList();
+  } catch(e) {
+    console.error('Error loading barcode list:', e);
+  }
+  showLoading(false);
+}
+
+function renderBarcodeList() {
+  const filter = document.getElementById('barcodeFilter').value.toLowerCase();
+  const katFilter = document.getElementById('barcodeKatFilter').value;
+  const el = document.getElementById('barcodeList');
+  
+  let filtered = barcodeData;
+  if (filter) {
+    filtered = filtered.filter(p => p.nama.toLowerCase().includes(filter) || p.barcode.includes(filter));
+  }
+  if (katFilter) {
+    filtered = filtered.filter(p => p.kategori === katFilter);
+  }
+  
+  if (!filtered.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:24px;">Tidak ada produk dengan barcode</div>';
+    return;
+  }
+  
+  el.innerHTML = filtered.map(p => {
+    const isChecked = selectedBarcodeItems.has(p.id);
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;${isChecked?'border-color:var(--accent);':''}">
+        <input type="checkbox" id="bc-${p.id}" value="${p.id}" 
+          ${isChecked?'checked':''} onchange="toggleBarcodeItem(${p.id})"
+          style="width:20px;height:20px;cursor:pointer;flex-shrink:0;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.emoji||'📦'} ${p.nama}</div>
+          <div style="font-size:11px;color:var(--muted);">${p.kategori} · ${fRp(p.harga)}</div>
+        </div>
+        <div style="font-family:var(--fh);font-size:14px;font-weight:700;letter-spacing:1px;padding:4px 10px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">${p.barcode}</div>
+        <button class="mbtn" style="padding:6px 12px;font-size:11px;background:var(--blue);color:#fff;flex-shrink:0;" onclick="previewBarcode(${p.id})">👁 Preview</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterBarcodeList() {
+  renderBarcodeList();
+}
+
+function toggleBarcodeItem(id) {
+  if (selectedBarcodeItems.has(id)) {
+    selectedBarcodeItems.delete(id);
+  } else {
+    selectedBarcodeItems.add(id);
+  }
+  updateBarcodeSelection();
+  renderBarcodeList();
+}
+
+function toggleSelectAllBarcode() {
+  const checked = document.getElementById('selectAllBarcode').checked;
+  const filter = document.getElementById('barcodeFilter').value.toLowerCase();
+  const katFilter = document.getElementById('barcodeKatFilter').value;
+  
+  let filtered = barcodeData;
+  if (filter) {
+    filtered = filtered.filter(p => p.nama.toLowerCase().includes(filter) || p.barcode.includes(filter));
+  }
+  if (katFilter) {
+    filtered = filtered.filter(p => p.kategori === katFilter);
+  }
+  
+  if (checked) {
+    filtered.forEach(p => selectedBarcodeItems.add(p.id));
+  } else {
+    filtered.forEach(p => selectedBarcodeItems.delete(p.id));
+  }
+  
+  updateBarcodeSelection();
+  renderBarcodeList();
+}
+
+function updateBarcodeSelection() {
+  document.getElementById('barcodeSelectedCount').textContent = `${selectedBarcodeItems.size} dipilih`;
+}
+
+async function previewBarcode(id) {
+  const produk = barcodeData.find(p => p.id === id);
+  if (!produk) return;
+  
+  showLoading(true);
+  try {
+    const res = await fetch('/api/barcode/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code: produk.barcode, format: 'code128'})
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Gagal generate barcode');
+    }
+    
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    
+    document.getElementById('barcodePreviewTitle').textContent = produk.nama;
+    document.getElementById('barcodePreviewImg').src = url;
+    document.getElementById('barcodePreviewCode').textContent = produk.barcode;
+    document.getElementById('barcodeDownloadLink').href = url;
+    document.getElementById('barcodeDownloadLink').download = `barcode-${produk.barcode}.png`;
+    
+    openM('mBarcodePreview');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function generateBarcodeSheet() {
+  if (selectedBarcodeItems.size === 0) {
+    showToast('⚠️ Pilih minimal 1 produk');
+    return;
+  }
+  
+  const items = barcodeData
+    .filter(p => selectedBarcodeItems.has(p.id))
+    .map(p => ({
+      id: p.id,
+      nama: p.nama,
+      barcode: p.barcode,
+      harga: p.harga
+    }));
+  
+  showLoading(true);
+  try {
+    const res = await fetch('/api/barcode/print-sheet', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({items})
+    });
+    
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Gagal generate sheet');
+    }
+    
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'barcode-sheet.pdf';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    showToast('✅ PDF barcode sheet sedang didownload');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+// ══════════════════════════════════
+//  STOK LOG / RIWAYAT PERUBAHAN STOK
+// ══════════════════════════════════
+async function openStokLog() { 
+  openM('mStokLog'); 
+  const today = new Date().toISOString().split('T')[0];
+  if (!document.getElementById('slDari').value) document.getElementById('slDari').value = today;
+  if (!document.getElementById('slKe').value) document.getElementById('slKe').value = today;
+  await muatStokLog(); 
+}
+
+async function muatStokLog() {
+  const dari = document.getElementById('slDari').value;
+  const ke   = document.getElementById('slKe').value;
+  const tipe = document.getElementById('slTipe').value;
+  showLoading(true);
+  
+  let url = `/api/stok-log?dari=${dari}&ke=${ke}&limit=100`;
+  if (tipe) url += `&tipe=${tipe}`;
+  
+  const list = await api(url);
+  const el = document.getElementById('slContent');
+  
+  if (!list.length) {
+    el.innerHTML='<div style="color:var(--muted);text-align:center;padding:24px;font-size:14px">Tidak ada riwayat perubahan stok di periode ini</div>';
+    showLoading(false); return;
+  }
+  
+  const alasanMap = {
+    'stok_fisik': 'Stok Fisik Berbeda',
+    'rusak': 'Barang Rusak/Hilang',
+    'expired': 'Barang Expired',
+    'penyesuaian': 'Penyesuaian Awal',
+    'lainnya': 'Lainnya',
+    'void_transaksi': 'Void Transaksi',
+    'restore_transaksi': 'Restore Transaksi'
+  };
+  
+  const tipeBadge = (tipe) => {
+    if (tipe === 'masuk') return `<span style="background:var(--green);color:#111;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;">MASUK</span>`;
+    if (tipe === 'keluar') return `<span style="background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;">KELUAR</span>`;
+    return `<span style="background:var(--blue);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;">ADJUST</span>`;
+  };
+  
+  el.innerHTML=`
+    <div style="max-height:400px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;">
+    ${list.map(l=>{
+      const wkt = new Date(l.waktu).toLocaleString('id-ID', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      return `
+      <div class="ri" style="${l.tipe==='masuk'?'border-left:3px solid var(--green);':l.tipe==='keluar'?'border-left:3px solid var(--red);':'border-left:3px solid var(--blue);'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:20px;">${l.produk_emoji||'📦'}</span>
+            <span style="font-weight:600;">${l.produk_nama}</span>
+          </div>
+          ${tipeBadge(l.tipe)}
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px;">
+          <span style="color:var(--muted);">${wkt} · ${l.dibuat_oleh}</span>
+          <span style="font-family:var(--fh);font-weight:700;color:var(--accent);">${l.stok_sebelum} → ${l.stok_sesudah}</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);background:var(--surface);padding:6px 10px;border-radius:6px;margin-top:6px;">
+          <div><strong>Jumlah:</strong> ${l.tipe==='masuk'?'+':l.tipe==='keluar'?'-':''}${l.jumlah}</div>
+          <div><strong>Alasan:</strong> ${alasanMap[l.alasan] || l.alasan}</div>
+          ${l.keterangan ? `<div><strong>Ket:</strong> ${l.keterangan}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('')}
     </div>`;
   showLoading(false);
 }
@@ -2420,6 +3544,8 @@ async function muatRiwayat() {
 //  LAPORAN
 // ══════════════════════════════════
 let lapTabIdx = 0;
+let chartInstance = null;
+let currentChartType = 'harian';
 
 async function openLaporan() {
   // Default: hari ini
@@ -2432,13 +3558,14 @@ async function openLaporan() {
 
 function switchLapTab(idx) {
   lapTabIdx = idx;
-  [0,1,2].forEach(i => {
+  [0,1,2,3].forEach(i => {
     document.getElementById(`lapTab${i}`).classList.toggle('active', i === idx);
   });
   document.getElementById('lapContent').style.display    = idx === 0 ? '' : 'none';
   document.getElementById('lapTopContent').style.display = idx === 1 ? '' : 'none';
   document.getElementById('lapStokContent').style.display= idx === 2 ? '' : 'none';
-  document.getElementById('lapDateFilter').style.display = idx < 2 ? '' : 'none';
+  document.getElementById('lapChartContent').style.display= idx === 3 ? '' : 'none';
+  document.getElementById('lapDateFilter').style.display = idx === 0 || idx === 1 || idx === 3 ? '' : 'none';
   document.getElementById('lapExportBtn').style.display  = idx === 0 ? '' : 'none';
   muatLapTab();
 }
@@ -2446,7 +3573,178 @@ function switchLapTab(idx) {
 async function muatLapTab() {
   if (lapTabIdx === 0) await muatLaporan();
   else if (lapTabIdx === 1) await muatTopProduk();
-  else await muatStokRendah();
+  else if (lapTabIdx === 2) await muatStokRendah();
+  else if (lapTabIdx === 3) await muatChart();
+}
+
+// ══════════════════════════════════
+//  GRAFIK / CHART
+// ══════════════════════════════════
+function switchChartTab(tipe) {
+  currentChartType = tipe;
+  ['harian','mingguan','bulanan'].forEach(t => {
+    document.getElementById(`chartTab${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.toggle('active', t === tipe);
+  });
+  muatChart();
+}
+
+async function muatChart() {
+  showLoading(true);
+  
+  const dari = document.getElementById('lDari').value;
+  const ke   = document.getElementById('lKe').value;
+  
+  // Update button active state
+  ['harian','mingguan','bulanan'].forEach(t => {
+    document.getElementById(`chartTab${t.charAt(0).toUpperCase() + t.slice(1)}`).classList.toggle('active', t === currentChartType);
+  });
+  
+  try {
+    const data = await api(`/api/laporan/chart?tipe=${currentChartType}&dari=${dari}&ke=${ke}`);
+    
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    
+    // Destroy existing chart
+    if (chartInstance) {
+      chartInstance.destroy();
+    }
+    
+    // Calculate stats
+    const totalTransaksi = data.datasets.transaksi.reduce((a,b)=>a+b,0);
+    const totalOmzet = data.datasets.omzet.reduce((a,b)=>a+b,0);
+    const totalDiskon = data.datasets.diskon.reduce((a,b)=>a+b,0);
+    
+    document.getElementById('chartStats').innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Total Transaksi</div>
+        <div style="font-family:var(--fh);font-size:18px;font-weight:800;color:var(--blue);">${totalTransaksi}</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Total Omzet</div>
+        <div style="font-family:var(--fh);font-size:18px;font-weight:800;color:var(--accent);">${fRp(totalOmzet)}</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">Total Diskon</div>
+        <div style="font-family:var(--fh);font-size:18px;font-weight:800;color:var(--purple);">${fRp(totalDiskon)}</div>
+      </div>
+    `;
+    
+    // Create new chart
+    chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.labels,
+        datasets: [
+          {
+            label: 'Omzet (Rp)',
+            data: data.datasets.omzet,
+            backgroundColor: 'rgba(245, 166, 35, 0.8)',
+            borderColor: 'rgba(245, 166, 35, 1)',
+            borderWidth: 1,
+            yAxisID: 'y',
+            borderRadius: 4,
+          },
+          {
+            label: 'Jumlah Transaksi',
+            data: data.datasets.transaksi,
+            type: 'line',
+            borderColor: 'rgba(92, 154, 255, 1)',
+            backgroundColor: 'rgba(92, 154, 255, 0.1)',
+            borderWidth: 2,
+            pointBackgroundColor: 'rgba(92, 154, 255, 1)',
+            pointRadius: 4,
+            fill: true,
+            yAxisID: 'y1',
+            tension: 0.4
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: getComputedStyle(document.body).getPropertyValue('--text').trim() || '#f0f0f8',
+              font: { family: 'DM Sans', size: 12 }
+            }
+          },
+          tooltip: {
+            backgroundColor: 'rgba(26, 29, 39, 0.95)',
+            titleColor: '#f5a623',
+            bodyColor: '#f0f0f8',
+            borderColor: 'rgba(245, 166, 35, 0.3)',
+            borderWidth: 1,
+            padding: 12,
+            callbacks: {
+              label: function(context) {
+                let label = context.dataset.label || '';
+                if (label) {
+                  label += ': ';
+                }
+                if (context.dataset.yAxisID === 'y') {
+                  label += fRp(context.parsed.y);
+                } else {
+                  label += context.parsed.y + ' trx';
+                }
+                return label;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: {
+              color: getComputedStyle(document.body).getPropertyValue('--muted').trim() || '#8891a8',
+              font: { family: 'DM Sans', size: 10 },
+              maxRotation: 45,
+              minRotation: 0
+            },
+            grid: {
+              color: 'rgba(46, 50, 68, 0.5)'
+            }
+          },
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            ticks: {
+              color: '#f5a623',
+              font: { family: 'DM Sans', size: 10 },
+              callback: function(value) {
+                return 'Rp ' + (value / 1000000).toFixed(1) + 'jt';
+              }
+            },
+            grid: {
+              color: 'rgba(46, 50, 68, 0.5)'
+            }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            ticks: {
+              color: '#5c9aff',
+              font: { family: 'DM Sans', size: 10 }
+            },
+            grid: {
+              drawOnChartArea: false
+            }
+          }
+        }
+      }
+    });
+    
+  } catch(e) {
+    console.error('Chart error:', e);
+    document.getElementById('chartStats').innerHTML = '<div style="color:var(--red);text-align:center;">Gagal memuat grafik</div>';
+  }
+  
+  showLoading(false);
 }
 
 async function muatLaporan() {
@@ -2541,6 +3839,32 @@ async function exportCSV() {
   const ke   = document.getElementById('lKe').value;
   window.location.href = `/api/export/csv?dari=${dari}&ke=${ke}`;
   showToast('✅ CSV sedang didownload...');
+}
+
+async function exportPDF() {
+  const dari = document.getElementById('lDari').value;
+  const ke   = document.getElementById('lKe').value;
+  showLoading(true);
+  try {
+    const res = await fetch(`/api/export/pdf?dari=${dari}&ke=${ke}`);
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Gagal export PDF');
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `laporan-penjualan-${dari || 'semua'}-${ke || 'semua'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    showToast('✅ PDF sedang didownload...');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
 }
 
 // ══════════════════════════════════
