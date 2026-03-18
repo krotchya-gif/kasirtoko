@@ -1,4 +1,4 @@
-"""
+﻿"""
 KasirToko — Backend Flask + SQLite/PostgreSQL
 Jalankan: python app.py
 Buka browser: http://localhost:5000
@@ -145,7 +145,7 @@ def init_db():
                 nama      TEXT    NOT NULL,
                 harga     INTEGER NOT NULL DEFAULT 0,
                 stok      INTEGER NOT NULL DEFAULT 0,
-                emoji     TEXT    NOT NULL DEFAULT '📦',
+                emoji     TEXT    NOT NULL DEFAULT '[BOX]',
                 kategori  TEXT    NOT NULL DEFAULT 'Umum',
                 aktif     INTEGER NOT NULL DEFAULT 1,
                 dibuat    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -159,7 +159,7 @@ def init_db():
                 nama      TEXT    NOT NULL,
                 harga     INTEGER NOT NULL DEFAULT 0,
                 stok      INTEGER NOT NULL DEFAULT 0,
-                emoji     TEXT    NOT NULL DEFAULT '📦',
+                emoji     TEXT    NOT NULL DEFAULT '[BOX]',
                 kategori  TEXT    NOT NULL DEFAULT 'Umum',
                 aktif     INTEGER NOT NULL DEFAULT 1,
                 dibuat    TEXT    DEFAULT (datetime('now','localtime')),
@@ -209,7 +209,7 @@ def init_db():
                 transaksi_id INTEGER NOT NULL,
                 produk_id    INTEGER NOT NULL,
                 nama_produk  TEXT    NOT NULL,
-                emoji        TEXT    DEFAULT '📦',
+                emoji        TEXT    DEFAULT '[BOX]',
                 harga        INTEGER NOT NULL,
                 qty          INTEGER NOT NULL,
                 subtotal     INTEGER NOT NULL,
@@ -223,7 +223,7 @@ def init_db():
                 transaksi_id INTEGER NOT NULL,
                 produk_id    INTEGER NOT NULL,
                 nama_produk  TEXT    NOT NULL,
-                emoji        TEXT    DEFAULT '📦',
+                emoji        TEXT    DEFAULT '[BOX]',
                 harga        INTEGER NOT NULL,
                 qty          INTEGER NOT NULL,
                 subtotal     INTEGER NOT NULL,
@@ -574,7 +574,7 @@ def init_db():
                 ('karyawan', 'Karyawan',     _hash('karyawan123'), 'karyawan'),
             ]
         )
-        print("✅ Akun default dibuat: pemilik/pemilik123  dan  karyawan/karyawan123")
+        print("[OK] Akun default dibuat: pemilik/pemilik123  dan  karyawan/karyawan123")
 
     # Tabel pengaturan toko (key-value)
     c.execute("""
@@ -681,7 +681,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print(f"✅ Database siap: {DB_PATH}")
+    print(f"[OK] Database siap: {DB_PATH}")
 
 
 def migrate_multi_tenant(c, use_postgres):
@@ -698,7 +698,7 @@ def migrate_multi_tenant(c, use_postgres):
             "INSERT INTO users (username, nama, password, role, is_superadmin) VALUES (?,?,?,?,?)",
             ('superadmin', 'Super Administrator', _hash('superadmin123'), 'superadmin', 1)
         )
-        print("✅ Superadmin dibuat: superadmin/superadmin123")
+        print("[OK] Superadmin dibuat: superadmin/superadmin123")
     
     # 2. Migrasi pengguna lama ke users (jika belum)
     c.execute("SELECT COUNT(*) as count FROM users WHERE role = 'pemilik'")
@@ -728,7 +728,7 @@ def migrate_multi_tenant(c, use_postgres):
                 )
             except Exception:
                 pass
-        print("✅ Data pengguna dimigrasi ke users")
+        print("[OK] Data pengguna dimigrasi ke users")
     
     # 3. Buat toko dari pengaturan (jika belum ada toko)
     c.execute("SELECT COUNT(*) as count FROM stores")
@@ -765,7 +765,7 @@ def migrate_multi_tenant(c, use_postgres):
                 "INSERT INTO stores (name, slug, address, phone, owner_id) VALUES (?,?,?,?,?)",
                 (nama_toko, slug, alamat, telp, owner_id)
             )
-            print(f"✅ Toko '{nama_toko}' dibuat dengan slug '{slug}'")
+            print(f"[OK] Toko '{nama_toko}' dibuat dengan slug '{slug}'")
         except Exception as e:
             # Jika slug sudah ada, tambahkan angka
             slug = f"{slug}-1"
@@ -773,7 +773,7 @@ def migrate_multi_tenant(c, use_postgres):
                 "INSERT INTO stores (name, slug, address, phone, owner_id) VALUES (?,?,?,?,?)",
                 (nama_toko, slug, alamat, telp, owner_id)
             )
-            print(f"✅ Toko '{nama_toko}' dibuat dengan slug '{slug}'")
+            print(f"[OK] Toko '{nama_toko}' dibuat dengan slug '{slug}'")
     
     # 4. Tambah kolom store_id ke tabel existing (jika belum)
     tables_to_update = ['produk', 'transaksi', 'kas', 'pelanggan', 'stok_log', 'tutup_kasir']
@@ -794,7 +794,7 @@ def migrate_multi_tenant(c, use_postgres):
         except Exception:
             pass
     
-    print("✅ Data existing diupdate dengan store_id = 1")
+    print("[OK] Data existing diupdate dengan store_id = 1")
 
 
 # ─────────────────────────────────────
@@ -1473,7 +1473,7 @@ def tambah_produk():
     conn = get_db()
     cur = db_execute(conn, 
         "INSERT INTO produk (nama, harga, stok, emoji, kategori, harga_modal, stok_min, diskon, barcode, store_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (d['nama'], d['harga'], d['stok'], d.get('emoji','📦'), d['kategori'],
+        (d['nama'], d['harga'], d['stok'], d.get('emoji','[BOX]'), d['kategori'],
          d.get('harga_modal',0), d.get('stok_min',0), d.get('diskon',0), d.get('barcode',''), store_id)
     )
     produk_id = cur.lastrowid
@@ -1498,7 +1498,7 @@ def update_produk(pid):
         """UPDATE produk SET nama=?, harga=?, stok=?, emoji=?, kategori=?,
            harga_modal=?, stok_min=?, diskon=?, barcode=?,
            diubah=datetime('now','localtime') WHERE id=? AND store_id=?""",
-        (d['nama'], d['harga'], d['stok'], d.get('emoji','📦'), d['kategori'],
+        (d['nama'], d['harga'], d['stok'], d.get('emoji','[BOX]'), d['kategori'],
          d.get('harga_modal',0), d.get('stok_min',0), d.get('diskon',0), d.get('barcode',''), pid, store_id)
     )
     conn.commit()
@@ -1645,7 +1645,7 @@ def buat_transaksi():
                 """INSERT INTO transaksi_item
                    (transaksi_id, produk_id, nama_produk, emoji, harga, qty, subtotal)
                    VALUES (?,?,?,?,?,?,?)""",
-                (trx_id, item['id'], item['nama'], item.get('emoji','📦'),
+                (trx_id, item['id'], item['nama'], item.get('emoji','[BOX]'),
                  item['harga'], item['qty'], item['harga'] * item['qty'])
             )
             db_execute(conn, 
@@ -3756,7 +3756,7 @@ def import_produk_csv():
             errors.append(f'Baris {i} ({nama}): harga tidak boleh negatif')
             continue
         diskon = max(0, min(100, diskon))
-        emoji  = r.get('emoji', '📦').strip() or '📦'
+        emoji  = r.get('emoji', '[BOX]').strip() or '[BOX]'
         valid.append({'nama': nama, 'kategori': kat, 'harga': harga, 'stok': stok, 'emoji': emoji,
                       'harga_modal': harga_modal, 'stok_min': stok_min, 'diskon': diskon})
 
@@ -3957,9 +3957,9 @@ def ganti_password_sendiri():
 # ─────────────────────────────────────
 try:
     init_db()
-    print("✅ Database initialized")
+    print("[OK] Database initialized")
 except Exception as e:
-    print(f"⚠️ Database init error (will retry on first request): {e}")
+    print(f"[WARN] Database init error (will retry on first request): {e}")
     import traceback
     print(traceback.format_exc())
     _db_init_error = e
@@ -3970,19 +3970,19 @@ def ensure_db():
     if '_db_init_error' in globals():
         try:
             init_db()
-            print("✅ Database initialized (retry)")
+            print("[OK] Database initialized (retry)")
             del globals()['_db_init_error']
         except Exception as e:
-            print(f"❌ Database init failed again: {e}")
+            print(f"[ERR] Database init failed again: {e}")
 
 # ─────────────────────────────────────
 #  JALANKAN SERVER (LOCAL DEV)
 # ─────────────────────────────────────
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("  🏪 KasirToko v1.11.3 — Python + Flask + SQLite")
+    print("  [TOKO] KasirToko v1.11.3 — Python + Flask + SQLite")
     print("="*50)
-    print("  ✨ Fitur: Scan Barcode | Printer App | Multi User")
+    print("  * Fitur: Scan Barcode | Printer App | Multi User")
     print("")
     # Get IP address for mobile access
     import socket
@@ -3993,10 +3993,10 @@ if __name__ == '__main__':
         s.close()
     except:
         ip = "localhost"
-    print(f"  💻 Laptop:     http://localhost:5000")
-    print(f"  📱 Mobile:     http://{ip}:5000")
+    print(f"  [PC] Laptop:     http://localhost:5000")
+    print(f"  [HP] Mobile:     http://{ip}:5000")
     print("")
-    print("  ℹ️  Scan barcode butuh HTTPS/localhost (gunakan IP di atas)")
-    print("  ⏻️   Tekan Ctrl+C untuk menghentikan server")
+    print("  [i]  Scan barcode butuh HTTPS/localhost (gunakan IP di atas)")
+    print("  [OFF]   Tekan Ctrl+C untuk menghentikan server")
     print("="*50 + "\n")
     app.run(debug=False, host='0.0.0.0', port=5000)
