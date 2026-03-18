@@ -929,7 +929,12 @@ def get_transaksi():
 @app.route('/api/transaksi/<int:tid>', methods=['GET'])
 def get_transaksi_by_id(tid):
     conn = get_db()
-    trx = db_execute(conn, "SELECT * FROM transaksi WHERE id=?", (tid,)).fetchone()
+    trx = db_execute(conn, """
+        SELECT t.*, COALESCE(p.nama, '') AS pelanggan_nama
+        FROM transaksi t
+        LEFT JOIN pelanggan p ON p.id = t.pelanggan_id
+        WHERE t.id=?
+    """, (tid,)).fetchone()
     if not trx:
         conn.close()
         return jsonify({'error': 'Tidak ditemukan'}), 404

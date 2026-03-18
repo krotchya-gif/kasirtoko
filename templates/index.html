@@ -382,6 +382,149 @@ html.light body{color-scheme:light;}
 .ir-chip{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 11px;font-size:12px;font-family:var(--fh);font-weight:700;}
 
 /* ══════════════════════════════════
+   RIWAYAT TRANSAKSI - NEW DESIGN
+   ══════════════════════════════════ */
+.riwayat-modal{padding:0!important;background:var(--bg)!important;}
+.riwayat-modal .mtit{padding:16px 20px 0;}
+
+/* Search Bar */
+.riwayat-search{position:relative;margin:0 20px 16px;}
+.riwayat-search-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--muted);}
+.riwayat-search input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:12px 14px 12px 42px;border-radius:12px;font-size:15px;outline:none;transition:border .2s;}
+.riwayat-search input:focus{border-color:var(--accent);}
+.riwayat-search input::placeholder{color:var(--muted);}
+
+/* Tabs */
+.riwayat-tabs{display:flex;gap:0;margin:0 20px 16px;background:var(--surface2);border-radius:12px;padding:4px;}
+.riwayat-tab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:none;border:none;color:var(--muted);padding:12px 8px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;}
+.riwayat-tab.active{background:var(--accent);color:#111;box-shadow:0 2px 8px rgba(245,166,35,.3);}
+.riwayat-tab-badge{font-size:16px;}
+
+/* Filter Row */
+.riwayat-filter-row{display:flex;gap:10px;margin:0 20px 16px;}
+.riwayat-filter-dropdown{flex:1;}
+.riwayat-filter-dropdown select,.riwayat-filter-dropdown input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:11px 14px;border-radius:10px;font-size:14px;outline:none;cursor:pointer;}
+
+/* Summary Card */
+.riwayat-summary{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 20px;margin:0 20px 16px;}
+.riwayat-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.riwayat-summary-item{display:flex;flex-direction:column;gap:4px;}
+.riwayat-summary-item.full-width{grid-column:1/-1;}
+.riwayat-summary-label{font-size:12px;color:var(--muted);}
+.riwayat-summary-value{font-size:18px;font-weight:700;color:var(--text);}
+.riwayat-summary-value.green{color:var(--green);}
+.riwayat-summary-value.red{color:var(--red);}
+.riwayat-summary-value.accent{color:var(--accent);}
+.riwayat-summary-link{font-size:12px;color:var(--red);text-decoration:none;display:flex;align-items:center;gap:4px;margin-top:2px;}
+.riwayat-summary-link:hover{text-decoration:underline;}
+
+/* Export Button */
+.riwayat-export-btn{width:calc(100% - 40px);margin:0 20px 16px;background:transparent;border:1.5px solid var(--red);color:var(--red);padding:14px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;}
+.riwayat-export-btn:hover{background:rgba(255,92,92,.1);}
+
+/* List */
+.riwayat-list{padding:0 20px 20px;max-height:50vh;overflow-y:auto;}
+
+/* Item Card */
+.riwayat-item{display:flex;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px;cursor:pointer;transition:all .15s;}
+.riwayat-item:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.2);}
+.riwayat-item.void{opacity:.6;}
+.riwayat-item.void .riwayat-item-total{color:var(--muted);}
+
+/* Date Box */
+.riwayat-date-box{background:var(--accent);color:#111;border-radius:12px;padding:10px 12px;text-align:center;min-width:64px;display:flex;flex-direction:column;justify-content:center;}
+.riwayat-date-box.void{background:var(--border);color:var(--muted);}
+.riwayat-date-day{font-size:24px;font-weight:800;line-height:1;}
+.riwayat-date-month{font-size:10px;font-weight:700;text-transform:uppercase;margin-top:2px;}
+.riwayat-date-time{font-size:10px;margin-top:4px;opacity:.8;}
+
+/* Item Content */
+.riwayat-item-content{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;}
+.riwayat-item-trx{font-size:13px;color:var(--muted);margin-bottom:2px;}
+.riwayat-item-pelanggan{font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px;}
+.riwayat-item-total{font-size:18px;font-weight:800;color:var(--green);}
+.riwayat-item-total.void{color:var(--muted);text-decoration:line-through;}
+
+/* Item Meta */
+.riwayat-item-meta{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:6px;}
+.riwayat-item-badge{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;}
+.riwayat-item-badge.tunai{background:rgba(61,255,160,.15);color:var(--green);border-color:rgba(61,255,160,.3);}
+.riwayat-item-badge.transfer{background:rgba(92,154,255,.15);color:var(--blue);border-color:rgba(92,154,255,.3);}
+.riwayat-item-badge.qris{background:rgba(185,124,255,.15);color:var(--purple);border-color:rgba(185,124,255,.3);}
+.riwayat-item-badge.void{background:rgba(255,92,92,.15);color:var(--red);border-color:rgba(255,92,92,.3);}
+.riwayat-item-kasir{font-size:12px;color:var(--muted);}
+.riwayat-item-kasir span{color:var(--red);font-weight:600;}
+
+/* Preview Struk */
+.preview-struk-content{background:#fff;color:#000;padding:24px;max-height:60vh;overflow-y:auto;font-family:'Courier New',monospace;font-size:12px;line-height:1.6;}
+.preview-struk-header{text-align:center;margin-bottom:16px;padding-bottom:16px;border-bottom:1px dashed #ccc;}
+.preview-struk-nama-toko{font-size:16px;font-weight:900;margin-bottom:4px;}
+.preview-struk-alamat{font-size:11px;color:#555;line-height:1.4;}
+.preview-struk-telepon{font-size:11px;color:#555;margin-top:4px;}
+.preview-struk-info{margin-bottom:16px;}
+.preview-struk-row{display:flex;justify-content:space-between;margin-bottom:6px;font-size:12px;}
+.preview-struk-row span:first-child{color:#555;}
+.preview-struk-row span:last-child{font-weight:600;}
+.preview-struk-divider{border:none;border-top:1px dashed #ccc;margin:12px 0;}
+.preview-struk-items{margin-bottom:16px;}
+.preview-struk-item{margin-bottom:8px;}
+.preview-struk-item-name{font-weight:600;margin-bottom:2px;}
+.preview-struk-item-detail{display:flex;justify-content:space-between;font-size:11px;color:#555;}
+.preview-struk-total{font-weight:900;font-size:14px;}
+.preview-struk-footer{text-align:center;margin-top:16px;padding-top:16px;border-top:1px dashed #ccc;font-size:11px;color:#555;}
+
+/* Share & Settings */
+.riwayat-share-btn{background:none;border:1.5px solid var(--red);color:var(--red);padding:8px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s;}
+.riwayat-share-btn:hover{background:rgba(255,92,92,.1);}
+.riwayat-toggle-row{display:flex;justify-content:space-between;align-items:center;}
+.riwayat-toggle-label{font-size:14px;font-weight:500;}
+.riwayat-pro-badge{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px;}
+.riwayat-toggle{position:relative;display:inline-block;width:50px;height:28px;}
+.riwayat-toggle input{opacity:0;width:0;height:0;}
+.riwayat-toggle-slider{position:absolute;inset:0;background:var(--border);border-radius:28px;cursor:pointer;transition:.3s;}
+.riwayat-toggle-slider:before{content:'';position:absolute;height:22px;width:22px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;}
+.riwayat-toggle input:checked+.riwayat-toggle-slider{background:var(--accent);}
+.riwayat-toggle input:checked+.riwayat-toggle-slider:before{transform:translateX(22px);}
+.riwayat-cetak-btn{flex:1;background:var(--red);color:#fff;border:none;padding:14px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;}
+.riwayat-cetak-btn:hover{opacity:.9;}
+.riwayat-setting-btn{width:48px;height:48px;background:transparent;border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.riwayat-setting-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Detail Transaksi Modal */
+.detail-trx-modal{background:var(--surface)!important;}
+.detail-trx-header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface);}
+.detail-trx-back{width:40px;height:40px;background:var(--surface2);border:none;border-radius:10px;color:var(--accent);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.detail-trx-back:hover{background:var(--border);}
+.detail-trx-title{flex:1;display:flex;align-items:center;gap:10px;font-size:16px;font-weight:700;}
+.detail-trx-copy{background:none;border:none;color:var(--accent);font-size:18px;cursor:pointer;padding:4px;opacity:.7;transition:opacity .2s;}
+.detail-trx-copy:hover{opacity:1;}
+.detail-trx-status{background:var(--green);color:#111;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:700;}
+.detail-trx-status.void{background:var(--red);color:#fff;}
+.detail-trx-content{padding:20px;max-height:55vh;overflow-y:auto;}
+.detail-trx-section{margin-bottom:24px;}
+.detail-trx-section-title{font-size:14px;font-weight:700;margin-bottom:12px;color:var(--text);}
+.detail-trx-row{display:flex;justify-content:space-between;margin-bottom:10px;font-size:14px;}
+.detail-trx-row span:first-child{color:var(--muted);}
+.detail-trx-row span:last-child{font-weight:600;}
+.detail-trx-table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+.detail-trx-table th{text-align:left;padding:10px 8px;font-size:12px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border);}
+.detail-trx-table td{padding:10px 8px;font-size:13px;border-bottom:1px solid var(--border);}
+.detail-trx-table td:last-child{text-align:right;font-weight:600;}
+.detail-trx-pelanggan{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;transition:all .2s;}
+.detail-trx-pelanggan:hover{border-color:var(--accent);}
+.detail-trx-pelanggan-name{font-weight:600;}
+.detail-trx-pelanggan-copy{color:var(--accent);font-size:18px;}
+.detail-trx-footer{display:flex;gap:10px;padding:16px 20px;border-top:1px solid var(--border);background:var(--surface);position:relative;}
+.detail-trx-btn-primary{flex:1;background:var(--red);color:#fff;border:none;padding:14px 20px;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;}
+.detail-trx-btn-primary:hover{opacity:.9;}
+.detail-trx-btn-menu{width:52px;height:52px;background:transparent;border:1.5px solid var(--border);border-radius:12px;color:var(--text);font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.detail-trx-btn-menu:hover{border-color:var(--accent);color:var(--accent);}
+.detail-trx-menu{display:none;position:absolute;bottom:70px;right:20px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:8px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.3);z-index:10;}
+.detail-trx-menu.show{display:block;}
+.detail-trx-menu button{width:100%;background:none;border:none;color:var(--text);padding:12px 16px;border-radius:8px;font-size:14px;text-align:left;cursor:pointer;transition:background .2s;display:flex;align-items:center;gap:8px;}
+.detail-trx-menu button:hover{background:var(--surface);}
+
+/* ══════════════════════════════════
    MOBILE RESPONSIVE - IMPROVED
    ══════════════════════════════════ */
 @media (max-width:768px){
@@ -857,22 +1000,107 @@ html.light body{color-scheme:light;}
 
 <!-- MODAL RIWAYAT -->
 <div class="overlay" id="mRiwayat">
-  <div class="mbox xl">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div class="mtit" style="margin-bottom:0">📋 Riwayat Transaksi</div>
-      <button class="mbtn sec" style="flex:0;padding:5px 12px;font-size:11px" onclick="closeM('mRiwayat')">✕</button>
+  <div class="mbox xl riwayat-modal">
+    <!-- Header dengan Search -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="mtit" style="margin-bottom:0;font-size:20px;">📋 Riwayat Transaksi</div>
+      <button class="mbtn sec" style="flex:0;padding:6px 12px;font-size:12px;border-radius:8px;" onclick="closeM('mRiwayat')">✕</button>
     </div>
-    <div class="date-filter">
-      <label>Dari:</label><input type="date" id="rDari">
-      <label>Ke:</label><input type="date" id="rKe">
-      <select id="rStatus" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:7px;font-family:var(--fb);font-size:12px;outline:none;cursor:pointer;">
-        <option value="">Semua Status</option>
-        <option value="aktif" selected>Aktif</option>
-        <option value="void">Void</option>
-      </select>
-      <button onclick="muatRiwayat()">🔍 Filter</button>
+    
+    <!-- Search Bar -->
+    <div class="riwayat-search">
+      <span class="riwayat-search-icon">🔍</span>
+      <input type="text" id="rCari" placeholder="Cari No. Transaksi/Nama Pelanggan" oninput="filterRiwayatDebounced()">
     </div>
-    <div id="rContent"></div>
+    
+    <!-- Tab Navigation -->
+    <div class="riwayat-tabs">
+      <button class="riwayat-tab active" id="tabLunas" onclick="switchTabRiwayat('lunas')">
+        <span class="riwayat-tab-badge" id="badgeLunas">💰</span>
+        <span>Lunas</span>
+      </button>
+      <button class="riwayat-tab" id="tabBelumLunas" onclick="switchTabRiwayat('belum_lunas')">
+        <span class="riwayat-tab-badge" id="badgeBelumLunas">⏳</span>
+        <span>Belum Lunas</span>
+      </button>
+    </div>
+    
+    <!-- Filter Periode -->
+    <div class="riwayat-filter-row">
+      <div class="riwayat-filter-dropdown">
+        <select id="rPeriode" onchange="onPeriodeChange()">
+          <option value="harian">📅 Periode Harian</option>
+          <option value="mingguan">📆 Periode Mingguan</option>
+          <option value="bulanan">📊 Periode Bulanan</option>
+        </select>
+      </div>
+      <div class="riwayat-filter-dropdown">
+        <input type="date" id="rTanggal" onchange="muatRiwayat()">
+      </div>
+    </div>
+    
+    <!-- Summary Card (Dynamic) -->
+    <div class="riwayat-summary" id="rSummary">
+      <!-- Diisi oleh JavaScript -->
+    </div>
+    
+    <!-- Export Button -->
+    <button class="riwayat-export-btn" onclick="exportRiwayatExcel()">
+      <span>📥</span>
+      <span>Ekspor Penjualan (.xlsx)</span>
+    </button>
+    
+    <!-- List Transaksi -->
+    <div class="riwayat-list" id="rContent"></div>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW STRUK -->
+<div class="overlay" id="mPreviewStruk">
+  <div class="mbox" style="max-width:400px;padding:0;overflow:hidden;">
+    <!-- Header Preview -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface);">
+      <button onclick="closeM('mPreviewStruk')" style="background:none;border:none;color:var(--accent);font-size:20px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+        <span>←</span>
+        <span style="font-size:14px;font-weight:600;">Kembali</span>
+      </button>
+      <div class="mtit" style="margin:0;font-size:16px;">Struk</div>
+      <button class="riwayat-share-btn" onclick="shareStruk()">
+        <span>↗️</span>
+        <span>Bagikan</span>
+      </button>
+    </div>
+    
+    <!-- Preview Struk Content -->
+    <div class="preview-struk-content" id="previewStrukContent">
+      <!-- Diisi oleh JavaScript -->
+    </div>
+    
+    <!-- Footer Actions -->
+    <div style="padding:16px 20px;border-top:1px solid var(--border);background:var(--surface);">
+      <!-- Toggle Logo PRO -->
+      <div class="riwayat-toggle-row">
+        <div>
+          <span class="riwayat-toggle-label">Cantumkan Logo di Struk</span>
+          <span class="riwayat-pro-badge">PRO</span>
+        </div>
+        <label class="riwayat-toggle">
+          <input type="checkbox" id="toggleLogoStruk" onchange="toggleLogoOnStruk()">
+          <span class="riwayat-toggle-slider"></span>
+        </label>
+      </div>
+      
+      <!-- Cetak Button -->
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="riwayat-cetak-btn" onclick="cetakStrukFromPreview()">
+          <span>🖨️</span>
+          <span>Cetak Struk (58mm)</span>
+        </button>
+        <button class="riwayat-setting-btn" onclick="openStrukSettings()" title="Pengaturan Struk">
+          <span>⚙️</span>
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -909,12 +1137,41 @@ html.light body{color-scheme:light;}
 
 <!-- MODAL DETAIL TRANSAKSI -->
 <div class="overlay" id="mDetailTrx">
-  <div class="mbox wide" style="text-align:left">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div class="mtit" style="margin-bottom:0">📄 Detail Transaksi</div>
-      <button class="mbtn sec" style="flex:0;padding:5px 12px;font-size:11px" onclick="closeM('mDetailTrx')">✕</button>
+  <div class="mbox wide detail-trx-modal" style="text-align:left;max-width:480px;padding:0;overflow:hidden;">
+    <!-- Header -->
+    <div class="detail-trx-header">
+      <button class="detail-trx-back" onclick="closeM('mDetailTrx')">
+        <span>←</span>
+      </button>
+      <div class="detail-trx-title">
+        <span id="detailNoTrx">-</span>
+        <button class="detail-trx-copy" onclick="copyNoTrx()" title="Copy">📋</button>
+      </div>
+      <span class="detail-trx-status" id="detailStatus">AKTIF</span>
     </div>
-    <div id="detailTrxContent"></div>
+    
+    <!-- Content -->
+    <div class="detail-trx-content" id="detailTrxContent">
+      <!-- Diisi oleh JavaScript -->
+    </div>
+    
+    <!-- Footer Actions -->
+    <div class="detail-trx-footer">
+      <button class="detail-trx-btn-primary" onclick="openPreviewStruk()">
+        <span>🧾</span>
+        <span>Lihat Struk</span>
+      </button>
+      <button class="detail-trx-btn-menu" onclick="toggleDetailMenu()" title="Menu lainnya">
+        <span>⋮</span>
+      </button>
+    </div>
+    
+    <!-- Dropdown Menu -->
+    <div class="detail-trx-menu" id="detailTrxMenu">
+      <button onclick="printStruk()">🖨️ Cetak Struk</button>
+      <button onclick="shareStrukDetail()">↗️ Bagikan</button>
+      <button onclick="voidTransaksi()" id="btnVoidTrx" style="color:var(--red);">🗑 Void Transaksi</button>
+    </div>
   </div>
 </div>
 
@@ -3076,65 +3333,283 @@ async function hapusProduk(id, nama) {
 // ══════════════════════════════════
 //  RIWAYAT
 // ══════════════════════════════════
-async function openRiwayat() { openM('mRiwayat'); await muatRiwayat(); }
+// ═══════════════════════════════════════════════════════════════
+//  RIWAYAT TRANSAKSI - NEW DESIGN
+// ═══════════════════════════════════════════════════════════════
+let riwayatTab = 'lunas'; // 'lunas' atau 'belum_lunas'
+let riwayatCache = [];
+let riwayatSearchQuery = '';
+
+async function openRiwayat() { 
+  openM('mRiwayat'); 
+  // Set default tanggal hari ini
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('rTanggal').value = today;
+  await muatRiwayat(); 
+}
+
+function switchTabRiwayat(tab) {
+  riwayatTab = tab;
+  document.getElementById('tabLunas').classList.toggle('active', tab === 'lunas');
+  document.getElementById('tabBelumLunas').classList.toggle('active', tab === 'belum_lunas');
+  muatRiwayat();
+}
+
+function onPeriodeChange() {
+  // Update date picker based on periode
+  const periode = document.getElementById('rPeriode').value;
+  const dateInput = document.getElementById('rTanggal');
+  const today = new Date();
+  
+  if (periode === 'harian') {
+    dateInput.type = 'date';
+    dateInput.value = today.toISOString().split('T')[0];
+  } else if (periode === 'mingguan') {
+    dateInput.type = 'week';
+    const weekNum = getWeekNumber(today);
+    dateInput.value = `${today.getFullYear()}-W${weekNum.toString().padStart(2, '0')}`;
+  } else if (periode === 'bulanan') {
+    dateInput.type = 'month';
+    dateInput.value = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}`;
+  }
+  muatRiwayat();
+}
+
+function getWeekNumber(d) {
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return weekNo;
+}
+
+let riwayatSearchDebounce;
+function filterRiwayatDebounced() {
+  clearTimeout(riwayatSearchDebounce);
+  riwayatSearchDebounce = setTimeout(() => {
+    riwayatSearchQuery = document.getElementById('rCari').value.toLowerCase().trim();
+    renderRiwayatList();
+  }, 300);
+}
 
 async function muatRiwayat() {
-  const dari   = document.getElementById('rDari').value;
-  const ke     = document.getElementById('rKe').value;
-  const status = document.getElementById('rStatus').value;
-  showLoading(true);
-  const list = await api(`/api/transaksi?dari=${dari}&ke=${ke}&status=${status}&limit=50`);
-  const el = document.getElementById('rContent');
-  if (!list.length) {
-    el.innerHTML='<div style="color:var(--muted);text-align:center;padding:24px;font-size:14px">Tidak ada transaksi di periode ini</div>';
-    showLoading(false); return;
-  }
-  const omzet = list.reduce((s,r)=>s+r.total,0);
-  const itmCnt = list.reduce((s,r)=>s+r.items.reduce((ss,i)=>ss+i.qty,0),0);
-  const isPemilik = APP_USER && APP_USER.role === 'pemilik';
+  const periode = document.getElementById('rPeriode').value;
+  const tanggal = document.getElementById('rTanggal').value;
   
-  el.innerHTML=`
-    <div class="rstat">
-      <div class="rsg">
-        <div><div class="rsv" style="color:var(--accent)">${fRp(omzet)}</div><div class="rsl">Total Omzet</div></div>
-        <div><div class="rsv" style="color:var(--blue)">${list.length}</div><div class="rsl">Transaksi</div></div>
-        <div><div class="rsv" style="color:var(--green)">${itmCnt}</div><div class="rsl">Item Terjual</div></div>
-      </div>
-    </div>
-    <div style="max-height:360px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent;">
-    ${list.map(r=>{
-      const isVoid = r.status === 'void';
-      const voidBadge = isVoid ? `<span style="background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;">VOID</span>` : '';
-      const voidInfo = isVoid ? `<div style="font-size:11px;color:var(--red);margin-top:4px;">🗑 ${r.void_by} · ${r.void_reason}</div>` : '';
-      const actions = (isPemilik && !isVoid) ? `
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button class="mbtn" style="flex:1;padding:6px 12px;font-size:11px;background:var(--surface2);" onclick="lihatDetailTrx(${r.id})">📄 Detail</button>
-          <button class="mbtn" style="flex:1;padding:6px 12px;font-size:11px;background:var(--red);color:#fff;" onclick="bukaVoidTrx(${r.id}, '${r.no_trx}', ${r.total}, '${r.waktu}')">🗑 Void</button>
-        </div>
-      ` : (isPemilik && isVoid) ? `
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button class="mbtn" style="flex:1;padding:6px 12px;font-size:11px;background:var(--surface2);" onclick="lihatDetailTrx(${r.id})">📄 Detail</button>
-          <button class="mbtn" style="flex:1;padding:6px 12px;font-size:11px;background:var(--green);color:#111;" onclick="restoreTrx(${r.id})">↩️ Restore</button>
-        </div>
-      ` : `
-        <div style="margin-top:8px;">
-          <button class="mbtn" style="width:100%;padding:6px 12px;font-size:11px;background:var(--surface2);" onclick="lihatDetailTrx(${r.id})">📄 Lihat Detail</button>
-        </div>
-      `;
-      return `
-      <div class="ri" style="${isVoid?'opacity:0.6;border-left:3px solid var(--red);':''}">
-        <div class="rim">${r.no_trx}${voidBadge} — ${new Date(r.waktu).toLocaleString('id-ID')}${r.pelanggan_nama ? ` · 👤 ${r.pelanggan_nama}` : ''}</div>
-        <div style="font-size:12px;color:var(--muted);text-decoration:${isVoid?'line-through':''}">${r.items.map(i=>`${i.emoji} ${i.nama_produk} ×${i.qty}`).join(', ')}</div>
-        <div style="display:flex;justify-content:space-between;margin-top:4px">
-          <div class="rit" style="${isVoid?'text-decoration:line-through;color:var(--muted);':''}">${fRp(r.total)}</div>
-          <span style="font-size:11px;color:var(--green);${isVoid?'text-decoration:line-through;':''}">Kembalian ${fRp(r.kembalian)}</span>
-        </div>
-        ${voidInfo}
-        ${actions}
-      </div>`;
-    }).join('')}
-    </div>`;
+  showLoading(true);
+  try {
+    // Build date range based on periode
+    let dari, ke;
+    if (periode === 'harian' && tanggal) {
+      dari = tanggal;
+      ke = tanggal;
+    } else if (periode === 'mingguan' && tanggal) {
+      const [year, week] = tanggal.split('-W');
+      const dates = getWeekDates(parseInt(year), parseInt(week));
+      dari = dates[0];
+      ke = dates[6];
+    } else if (periode === 'bulanan' && tanggal) {
+      const [year, month] = tanggal.split('-');
+      dari = `${year}-${month}-01`;
+      ke = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
+    } else {
+      // Default: today
+      const today = new Date().toISOString().split('T')[0];
+      dari = today;
+      ke = today;
+    }
+    
+    // Load all transactions (both lunas and belum lunas)
+    const status = riwayatTab === 'lunas' ? 'aktif' : 'aktif';
+    const list = await api(`/api/transaksi?dari=${dari}&ke=${ke}&status=${status}&limit=200`);
+    
+    // Filter berdasarkan tab (nantinya perlu field lunas/belum_lunas dari backend)
+    // Untuk sekarang, kita asumsikan semua aktif = lunas (untuk demo)
+    riwayatCache = list.map(r => ({
+      ...r,
+      is_lunas: r.metode_bayar !== 'hutang' // Asumsi sementara
+    }));
+    
+    renderRiwayatSummary();
+    renderRiwayatList();
+  } catch(e) {
+    showToast('❌ Gagal memuat riwayat: ' + e.message);
+  }
   showLoading(false);
+}
+
+function getWeekDates(year, week) {
+  const d = new Date(year, 0, 1);
+  const dayNum = d.getDay() || 7;
+  d.setDate(d.getDate() + 4 - dayNum);
+  d.setDate(d.getDate() + (week - 1) * 7);
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(d);
+    date.setDate(d.getDate() + i);
+    dates.push(date.toISOString().split('T')[0]);
+  }
+  return dates;
+}
+
+function renderRiwayatSummary() {
+  const filtered = riwayatCache.filter(r => {
+    if (riwayatTab === 'lunas') return r.is_lunas;
+    return !r.is_lunas;
+  });
+  
+  const jumlahTrx = filtered.length;
+  const produkTerjual = filtered.reduce((s, r) => s + r.items.reduce((ss, i) => ss + i.qty, 0), 0);
+  const totalOmzet = filtered.reduce((s, r) => s + r.total, 0);
+  
+  const el = document.getElementById('rSummary');
+  
+  if (riwayatTab === 'lunas') {
+    // Hitung profit (butuh harga_modal dari backend)
+    const totalProfit = filtered.reduce((s, r) => {
+      return s + r.items.reduce((ss, i) => {
+        const modal = i.harga_modal || 0;
+        return ss + ((i.harga - modal) * i.qty);
+      }, 0);
+    }, 0);
+    
+    el.innerHTML = `
+      <div class="riwayat-summary-grid">
+        <div class="riwayat-summary-item">
+          <span class="riwayat-summary-label">Jumlah Transaksi</span>
+          <span class="riwayat-summary-value">${jumlahTrx}</span>
+        </div>
+        <div class="riwayat-summary-item">
+          <span class="riwayat-summary-label">Jumlah Produk Terjual</span>
+          <span class="riwayat-summary-value">${produkTerjual} <a href="#" class="riwayat-summary-link" onclick="showProdukTerjualDetail();return false;">› Lihat Detail</a></span>
+        </div>
+        <div class="riwayat-summary-item">
+          <span class="riwayat-summary-label">Omzet</span>
+          <span class="riwayat-summary-value accent">${fRp(totalOmzet)}</span>
+        </div>
+        <div class="riwayat-summary-item">
+          <span class="riwayat-summary-label">Profit</span>
+          <span class="riwayat-summary-value">${fRp(totalProfit)}</span>
+        </div>
+      </div>
+    `;
+  } else {
+    // Belum Lunas - Piutang
+    const totalPiutang = filtered.reduce((s, r) => s + r.total, 0);
+    const totalTerbayar = filtered.reduce((s, r) => s + (r.terbayar || 0), 0);
+    const sisaPiutang = totalPiutang - totalTerbayar;
+    
+    el.innerHTML = `
+      <div class="riwayat-summary-grid">
+        <div class="riwayat-summary-item">
+          <span class="riwayat-summary-label">Jumlah Transaksi</span>
+          <span class="riwayat-summary-value">${jumlahTrx}</span>
+        </div>
+        <div class="riwayat-summary-item">
+          <span class="riwayat-summary-label">Jumlah Produk Terjual</span>
+          <span class="riwayat-summary-value">${produkTerjual}</span>
+        </div>
+        <div class="riwayat-summary-item">
+          <span class="riwayat-summary-label">Total Piutang</span>
+          <span class="riwayat-summary-value accent">${fRp(totalPiutang)}</span>
+        </div>
+        <div class="riwayat-summary-item">
+          <span class="riwayat-summary-label">Total Terbayar</span>
+          <span class="riwayat-summary-value green">${fRp(totalTerbayar)}</span>
+        </div>
+        <div class="riwayat-summary-item full-width">
+          <span class="riwayat-summary-label">Sisa Piutang</span>
+          <span class="riwayat-summary-value red">${fRp(sisaPiutang)}</span>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function renderRiwayatList() {
+  const el = document.getElementById('rContent');
+  
+  let filtered = riwayatCache.filter(r => {
+    if (riwayatTab === 'lunas') return r.is_lunas;
+    return !r.is_lunas;
+  });
+  
+  // Apply search
+  if (riwayatSearchQuery) {
+    filtered = filtered.filter(r => 
+      r.no_trx.toLowerCase().includes(riwayatSearchQuery) ||
+      (r.pelanggan_nama && r.pelanggan_nama.toLowerCase().includes(riwayatSearchQuery))
+    );
+  }
+  
+  if (!filtered.length) {
+    el.innerHTML = '<div style="color:var(--muted);text-align:center;padding:40px 20px;font-size:15px;">Tidak ada transaksi di periode ini</div>';
+    return;
+  }
+  
+  el.innerHTML = filtered.map(r => {
+    const isVoid = r.status === 'void';
+    const waktu = new Date(r.waktu);
+    const tgl = waktu.getDate();
+    const bln = waktu.toLocaleDateString('id-ID', { month: 'short' }).toUpperCase();
+    const jam = waktu.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    
+    const metodeClass = r.metode_bayar === 'tunai' ? 'tunai' : 
+                        r.metode_bayar === 'transfer' ? 'transfer' : 'qris';
+    const metodeLabel = r.metode_bayar === 'tunai' ? 'TUNAI' : 
+                        r.metode_bayar === 'transfer' ? 'TRANSFER' : 'QRIS';
+    
+    return `
+      <div class="riwayat-item ${isVoid ? 'void' : ''}" onclick="lihatDetailTrx(${r.id})">
+        <div class="riwayat-date-box ${isVoid ? 'void' : ''}">
+          <div class="riwayat-date-day">${tgl}</div>
+          <div class="riwayat-date-month">${bln} ${waktu.getFullYear()}</div>
+          <div class="riwayat-date-time">${jam}</div>
+        </div>
+        <div class="riwayat-item-content">
+          <div class="riwayat-item-trx">${r.no_trx}</div>
+          <div class="riwayat-item-pelanggan">${r.pelanggan_nama || 'Umum'}</div>
+          <div class="riwayat-item-total ${isVoid ? 'void' : ''}">${fRp(r.total)}</div>
+        </div>
+        <div class="riwayat-item-meta">
+          ${isVoid ? 
+            '<span class="riwayat-item-badge void">VOID</span>' :
+            `<span class="riwayat-item-badge ${metodeClass}">${metodeLabel}</span>`
+          }
+          <div class="riwayat-item-kasir">Dibuat Oleh <span>${r.kasir || 'Kasir'}</span></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function exportRiwayatExcel() {
+  showToast('📊 Mempersiapkan export Excel...');
+  // Implementasi export Excel akan ditambahkan di kemudian hari
+  // Bisa menggunakan library seperti SheetJS atau export CSV sementara
+  const filtered = riwayatCache.filter(r => {
+    if (riwayatTab === 'lunas') return r.is_lunas;
+    return !r.is_lunas;
+  });
+  
+  // Export CSV sebagai sementara
+  let csv = 'No,No Transaksi,Waktu,Pelanggan,Kasir,Total,Status\n';
+  filtered.forEach((r, i) => {
+    csv += `${i+1},${r.no_trx},"${r.waktu}","${r.pelanggan_nama || 'Umum'}","${r.kasir || '-'}",${r.total},${r.status}\n`;
+  });
+  
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `riwayat_transaksi_${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ Export CSV berhasil');
+}
+
+function showProdukTerjualDetail() {
+  showToast('📦 Fitur detail produk terjual akan segera hadir');
 }
 
 // ══════════════════════════════════
@@ -3188,74 +3663,287 @@ async function restoreTrx(id) {
   showLoading(false);
 }
 
+let currentDetailTrx = null;
+
 async function lihatDetailTrx(id) {
   showLoading(true);
   try {
     const trx = await api(`/api/transaksi/${id}`);
+    currentDetailTrx = trx;
     const isVoid = trx.status === 'void';
-    const statusBadge = isVoid 
-      ? `<span style="background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;">VOID</span>`
-      : `<span style="background:var(--green);color:#111;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;">AKTIF</span>`;
+    const isPemilik = APP_USER && APP_USER.role === 'pemilik';
+    
+    // Update header
+    document.getElementById('detailNoTrx').textContent = trx.no_trx;
+    const statusEl = document.getElementById('detailStatus');
+    statusEl.textContent = isVoid ? 'VOID' : 'AKTIF';
+    statusEl.className = 'detail-trx-status ' + (isVoid ? 'void' : '');
+    
+    // Build content
+    const waktu = new Date(trx.waktu);
+    const waktuStr = waktu.toLocaleDateString('id-ID', { 
+      day: 'numeric', month: 'long', year: 'numeric' 
+    }) + ' ' + waktu.toLocaleTimeString('id-ID', { 
+      hour: '2-digit', minute: '2-digit' 
+    });
+    
+    // Tabel pesanan
+    const tabelPesanan = trx.items.map(i => `
+      <tr>
+        <td>${i.nama_produk}</td>
+        <td>${fRp(i.harga)} × ${i.qty}</td>
+        <td>${fRp(i.subtotal)}</td>
+      </tr>
+    `).join('');
     
     document.getElementById('detailTrxContent').innerHTML = `
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <div>
-            <div style="font-family:var(--fh);font-size:16px;font-weight:800;">${trx.no_trx}</div>
-            <div style="font-size:12px;color:var(--muted);">${new Date(trx.waktu).toLocaleString('id-ID')}</div>
-          </div>
-          ${statusBadge}
+      <!-- Rincian Transaksi -->
+      <div class="detail-trx-section">
+        <div class="detail-trx-section-title">📋 Rincian Transaksi</div>
+        <div class="detail-trx-row">
+          <span>Dibuat Oleh</span>
+          <span>${trx.kasir || 'Kasir'} (Staff Kasir)</span>
         </div>
-        ${trx.pelanggan_nama ? `<div style="font-size:13px;margin-bottom:8px;">👤 ${trx.pelanggan_nama}</div>` : ''}
-        <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;">
-          ${trx.items.map(i=>`
-            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border);">
-              <div>
-                <span style="font-size:16px;margin-right:6px;">${i.emoji}</span>
-                <span>${i.nama_produk} × ${i.qty}</span>
-              </div>
-              <span style="font-weight:600;">${fRp(i.subtotal)}</span>
-            </div>
-          `).join('')}
+        <div class="detail-trx-row">
+          <span>Pembayaran</span>
+          <span>${(trx.metode_bayar || 'tunai').charAt(0).toUpperCase() + (trx.metode_bayar || 'tunai').slice(1)}</span>
         </div>
-        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-            <span style="color:var(--muted);">Subtotal</span>
+        <div class="detail-trx-row">
+          <span>Tanggal Transaksi</span>
+          <span>${waktuStr}</span>
+        </div>
+      </div>
+      
+      <!-- Pesanan -->
+      <div class="detail-trx-section">
+        <div class="detail-trx-section-title">🛒 Pesanan</div>
+        <table class="detail-trx-table">
+          <thead>
+            <tr>
+              <th>Nama Barang</th>
+              <th>Jumlah</th>
+              <th>Harga</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tabelPesanan}
+          </tbody>
+        </table>
+        <div style="border-top:2px solid var(--border);padding-top:12px;margin-top:12px;">
+          <div class="detail-trx-row">
+            <span>Total Pesanan</span>
             <span>${fRp(trx.subtotal)}</span>
           </div>
           ${trx.diskon > 0 ? `
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-            <span style="color:var(--muted);">Diskon</span>
+          <div class="detail-trx-row">
+            <span>Diskon</span>
             <span style="color:var(--green);">-${fRp(trx.diskon)}</span>
           </div>` : ''}
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-weight:700;">
-            <span>TOTAL</span>
+          <div class="detail-trx-row" style="font-size:16px;font-weight:700;margin-top:8px;">
+            <span>Total</span>
             <span style="color:var(--accent);">${fRp(trx.total)}</span>
           </div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-            <span style="color:var(--muted);">Bayar (${trx.metode_bayar || 'tunai'})</span>
+          <div class="detail-trx-row">
+            <span>Bayar</span>
             <span>${fRp(trx.bayar)}</span>
           </div>
-          <div style="display:flex;justify-content:space-between;">
-            <span style="color:var(--muted);">Kembalian</span>
+          <div class="detail-trx-row">
+            <span>Kembali</span>
             <span style="color:var(--green);">${fRp(trx.kembalian)}</span>
           </div>
         </div>
-        ${isVoid ? `
-        <div style="margin-top:12px;padding:10px;background:rgba(255,92,92,0.1);border-radius:8px;border-left:3px solid var(--red);">
-          <div style="font-size:12px;color:var(--red);font-weight:700;margin-bottom:4px;">🗑 Transaksi Dibatalkan</div>
-          <div style="font-size:11px;color:var(--muted);">Oleh: ${trx.void_by}</div>
-          <div style="font-size:11px;color:var(--muted);">Waktu: ${new Date(trx.void_at).toLocaleString('id-ID')}</div>
-          <div style="font-size:11px;color:var(--text);margin-top:4px;">Alasan: ${trx.void_reason}</div>
-        </div>
-        ` : ''}
       </div>
+      
+      <!-- Pelanggan -->
+      ${trx.pelanggan_nama ? `
+      <div class="detail-trx-section">
+        <div class="detail-trx-section-title">👤 Pelanggan</div>
+        <div class="detail-trx-pelanggan" onclick="copyPelangganName('${trx.pelanggan_nama}')">
+          <span class="detail-trx-pelanggan-name">${trx.pelanggan_nama}</span>
+          <span class="detail-trx-pelanggan-copy">📋</span>
+        </div>
+      </div>
+      ` : ''}
+      
+      <!-- Void Info -->
+      ${isVoid ? `
+      <div class="detail-trx-section" style="background:rgba(255,92,92,0.1);border-radius:12px;padding:16px;border-left:4px solid var(--red);">
+        <div style="color:var(--red);font-weight:700;margin-bottom:8px;">🗑 Transaksi Dibatalkan</div>
+        <div class="detail-trx-row">
+          <span>Oleh</span>
+          <span>${trx.void_by}</span>
+        </div>
+        <div class="detail-trx-row">
+          <span>Waktu Void</span>
+          <span>${new Date(trx.void_at).toLocaleString('id-ID')}</span>
+        </div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,92,92,0.3);">
+          <span style="color:var(--muted);font-size:12px;">Alasan:</span>
+          <div style="margin-top:4px;">${trx.void_reason}</div>
+        </div>
+      </div>
+      ` : ''}
     `;
+    
+    // Update menu dropdown
+    const menuEl = document.getElementById('detailTrxMenu');
+    const btnVoid = document.getElementById('btnVoidTrx');
+    if (isPemilik) {
+      btnVoid.style.display = isVoid ? 'none' : 'flex';
+      btnVoid.onclick = () => { closeDetailMenu(); bukaVoidTrx(trx.id, trx.no_trx, trx.total, trx.waktu); };
+    } else {
+      btnVoid.style.display = 'none';
+    }
+    
     openM('mDetailTrx');
   } catch(e) {
     showToast('❌ ' + e.message);
   }
   showLoading(false);
+}
+
+function copyNoTrx() {
+  if (currentDetailTrx) {
+    navigator.clipboard.writeText(currentDetailTrx.no_trx);
+    showToast('📋 No. Transaksi disalin');
+  }
+}
+
+function copyPelangganName(nama) {
+  navigator.clipboard.writeText(nama);
+  showToast('📋 Nama pelanggan disalin');
+}
+
+function toggleDetailMenu() {
+  document.getElementById('detailTrxMenu').classList.toggle('show');
+}
+
+function closeDetailMenu() {
+  document.getElementById('detailTrxMenu').classList.remove('show');
+}
+
+function openPreviewStruk() {
+  if (!currentDetailTrx) return;
+  closeM('mDetailTrx');
+  renderPreviewStruk(currentDetailTrx);
+  openM('mPreviewStruk');
+}
+
+function renderPreviewStruk(trx) {
+  const waktu = new Date(trx.waktu);
+  const waktuStr = waktu.toLocaleDateString('id-ID', { 
+    day: '2-digit', month: '2-digit', year: 'numeric' 
+  }) + ' ' + waktu.toLocaleTimeString('id-ID', { 
+    hour: '2-digit', minute: '2-digit' 
+  });
+  
+  const itemRows = trx.items.map(i => `
+    <div class="preview-struk-item">
+      <div class="preview-struk-item-name">${i.nama_produk}</div>
+      <div class="preview-struk-item-detail">
+        <span>${fRp(i.harga)} x ${i.qty}</span>
+        <span>${fRp(i.subtotal)}</span>
+      </div>
+    </div>
+  `).join('');
+  
+  document.getElementById('previewStrukContent').innerHTML = `
+    <div class="preview-struk-header">
+      <div class="preview-struk-nama-toko" id="strukNamaToko">${document.getElementById('logoToko').textContent || 'KasirToko'}</div>
+      <div class="preview-struk-alamat" id="strukAlamat">Jl. Contoh Alamat No. 123</div>
+      <div class="preview-struk-telepon" id="strukTelepon">0812-3456-7890</div>
+    </div>
+    
+    <div class="preview-struk-divider"></div>
+    
+    <div class="preview-struk-info">
+      <div class="preview-struk-row">
+        <span>Atas Nama</span>
+        <span>${trx.pelanggan_nama || 'Umum'}</span>
+      </div>
+      <div class="preview-struk-row">
+        <span>No</span>
+        <span>${trx.no_trx}</span>
+      </div>
+      <div class="preview-struk-row">
+        <span>Tanggal</span>
+        <span>${waktuStr}</span>
+      </div>
+      <div class="preview-struk-row">
+        <span>Kasir</span>
+        <span>${trx.kasir || 'Kasir'}</span>
+      </div>
+      <div class="preview-struk-row">
+        <span>Pembayaran</span>
+        <span>${(trx.metode_bayar || 'tunai').charAt(0).toUpperCase() + (trx.metode_bayar || 'tunai').slice(1)}</span>
+      </div>
+    </div>
+    
+    <div class="preview-struk-divider"></div>
+    
+    <div class="preview-struk-items">
+      ${itemRows}
+    </div>
+    
+    <div class="preview-struk-divider"></div>
+    
+    <div class="preview-struk-info">
+      <div class="preview-struk-row">
+        <span>Total Pesanan</span>
+        <span>${fRp(trx.subtotal)}</span>
+      </div>
+      ${trx.diskon > 0 ? `
+      <div class="preview-struk-row">
+        <span>Diskon</span>
+        <span>-${fRp(trx.diskon)}</span>
+      </div>` : ''}
+      <div class="preview-struk-row preview-struk-total">
+        <span>Total</span>
+        <span>${fRp(trx.total)}</span>
+      </div>
+      <div class="preview-struk-row">
+        <span>Bayar</span>
+        <span>${fRp(trx.bayar)}</span>
+      </div>
+      <div class="preview-struk-row">
+        <span>Kembali</span>
+        <span>${fRp(trx.kembalian)}</span>
+      </div>
+    </div>
+    
+    <div class="preview-struk-footer">
+      Terima kasih telah berbelanja
+    </div>
+  `;
+}
+
+function shareStruk() {
+  showToast('↗️ Fitur bagikan struk akan segera hadir');
+}
+
+function toggleLogoOnStruk() {
+  const showLogo = document.getElementById('toggleLogoStruk').checked;
+  showToast(showLogo ? '✅ Logo akan ditampilkan di struk' : '❌ Logo disembunyikan');
+}
+
+function cetakStrukFromPreview() {
+  if (currentDetailTrx) {
+    window.print();
+  }
+}
+
+function openStrukSettings() {
+  showToast('⚙️ Pengaturan struk akan segera hadir');
+}
+
+function printStruk() {
+  closeDetailMenu();
+  openPreviewStruk();
+}
+
+function shareStrukDetail() {
+  closeDetailMenu();
+  shareStruk();
 }
 
 // ══════════════════════════════════
