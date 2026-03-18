@@ -985,7 +985,11 @@ def require_login():
 @app.route('/')
 def index():
     user = get_current_user()
-    return render_template('index.html', user=user)
+    # Get user's stores for the switcher
+    stores = []
+    if user:
+        stores = get_accessible_stores(user['id'])
+    return render_template('index.html', user=user, stores=stores)
 
 
 @app.route('/login', methods=['GET', 'POST'])

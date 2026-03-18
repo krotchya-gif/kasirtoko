@@ -23,7 +23,10 @@
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <!-- Chart.js untuk grafik penjualan -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>const APP_USER = {{ user | tojson }};</script>
+<script>
+const APP_USER = {{ user | tojson }};
+const APP_STORES = {{ stores | tojson }};
+</script>
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#242736;--border:#2e3244;
@@ -869,20 +872,36 @@ html.light body{color-scheme:light;}
     <a href="/logout" style="margin-left:auto;background:none;border:1px solid rgba(255,92,92,.4);color:var(--red);font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;text-decoration:none;white-space:nowrap;">Keluar</a>
   </div>
   <nav class="drawer-nav">
-    {% if user.role == 'pemilik' %}
+    {% if user.is_superadmin %}
+    <!-- SUPERADMIN MENU -->
+    <button onclick="closeDrawer();openSuperadminPanel()" style="background:rgba(245,166,35,.15);border-radius:8px;margin:0 10px 8px;">
+      <span class="dn-icon">👑</span><span style="color:var(--accent);font-weight:700;">Superadmin Panel</span>
+    </button>
+    <hr class="drawer-divider">
+    {% endif %}
+    
+    {% if user.role == 'pemilik' or user.is_superadmin %}
     <button onclick="closeDrawer();openLaporan()"><span class="dn-icon">📊</span>Laporan Penjualan</button>
     <button onclick="closeDrawer();openDompet()"><span class="dn-icon">💰</span>Dompet / Kas</button>
     {% endif %}
     <button onclick="closeDrawer();openPelanggan('kelola')"><span class="dn-icon">👥</span>Pelanggan</button>
     <button onclick="closeDrawer();openRiwayat()"><span class="dn-icon">📋</span>Riwayat Transaksi</button>
     <button onclick="closeDrawer();openTutupKasir()" style="position:relative"><span class="dn-icon">🔒</span>Tutup Kasir<span class="tk-badge hidden" id="tkBadgeMob">!</span></button>
+    
+    <!-- Store Switcher (untuk pemilik dengan multiple toko) -->
+    <div id="storeSwitcherContainer" style="display:none;margin:10px 18px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">🏪 Toko Aktif</div>
+      <select id="storeSwitcher" onchange="switchStore(this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:6px;font-size:13px;">
+      </select>
+    </div>
+    
     <hr class="drawer-divider">
     <button class="drawer-pg-toggle" onclick="toggleDrawerPg()"><span class="dn-icon">⚙️</span>Pengaturan<span class="dn-arr" id="dnArr">▸</span></button>
     <div class="drawer-pg-sub" id="drawerPgSub">
       <button onclick="closeDrawer();openTambah()"><span class="dn-icon">➕</span>Tambah Produk</button>
       <button onclick="closeDrawer();openKelola()"><span class="dn-icon">⚙️</span>Kelola Produk</button>
       <button onclick="closeDrawer();openImportExport()"><span class="dn-icon">📤</span>Import / Export</button>
-      {% if user.role == 'pemilik' %}
+      {% if user.role == 'pemilik' or user.is_superadmin %}
       <button onclick="closeDrawer();openBarcodeGenerator()"><span class="dn-icon">🏷️</span>Cetak Barcode</button>
       <button onclick="closeDrawer();openStokLog()"><span class="dn-icon">📦</span>Riwayat Stok</button>
       <button onclick="closeDrawer();openPengguna()"><span class="dn-icon">👥</span>Tim</button>
@@ -1640,6 +1659,141 @@ html.light body{color-scheme:light;}
     <div class="mac">
       <button class="mbtn sec" onclick="closeM('mPengaturan')">Batal</button>
       <button class="mbtn pri" onclick="simpanPengaturan()">💾 Simpan ke DB</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═════════════════════════════════════
+     MODAL SUPERADMIN PANEL (MULTI-TENANT)
+     ═════════════════════════════════════ -->
+<div class="overlay" id="mSuperadmin" style="display:none;">
+  <div class="mbox xl">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="mtit" style="margin:0">👑 Superadmin Panel</div>
+        <span style="background:var(--accent);color:#111;font-size:11px;font-weight:700;padding:3px 10px;border-radius:6px;">ADMIN</span>
+      </div>
+      <button class="mbtn sec" style="flex:0;padding:6px 12px;font-size:12px;border-radius:8px;" onclick="closeM('mSuperadmin')">✕</button>
+    </div>
+    
+    <!-- TABS -->
+    <div class="riwayat-tabs" style="margin-bottom:20px;">
+      <button class="riwayat-tab active" id="saTabStores" onclick="switchSuperadminTab('stores')">
+        <span>🏪</span><span>Daftar Toko</span>
+      </button>
+      <button class="riwayat-tab" id="saTabOwners" onclick="switchSuperadminTab('owners')">
+        <span>👤</span><span>Pemilik</span>
+      </button>
+      <button class="riwayat-tab" id="saTabCreateStore" onclick="switchSuperadminTab('createStore')">
+        <span>➕</span><span>Buat Toko</span>
+      </button>
+      <button class="riwayat-tab" id="saTabCreateOwner" onclick="switchSuperadminTab('createOwner')">
+        <span>👤</span><span>Buat Pemilik</span>
+      </button>
+      <button class="riwayat-tab" id="saTabLogs" onclick="switchSuperadminTab('logs')">
+        <span>📋</span><span>Audit Logs</span>
+      </button>
+    </div>
+    
+    <!-- PANEL: DAFTAR TOKO -->
+    <div id="saPanelStores">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;">🏪 Semua Toko</div>
+        <div id="superadminStoresList" style="max-height:50vh;overflow-y:auto;">
+          <div style="text-align:center;color:var(--muted);padding:40px;">Memuat...</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- PANEL: DAFTAR PEMILIK -->
+    <div id="saPanelOwners" style="display:none;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;">👤 Daftar Pemilik</div>
+        <div id="superadminOwnersList" style="max-height:50vh;overflow-y:auto;">
+          <div style="text-align:center;color:var(--muted);padding:40px;">Memuat...</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- PANEL: BUAT TOKO -->
+    <div id="saPanelCreateStore" style="display:none;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;">
+        <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--accent);">➕ Buat Toko Baru</div>
+        
+        <div class="fg">
+          <label>Nama Toko <span style="color:var(--red)">*</span></label>
+          <input type="text" id="saStoreName" placeholder="Contoh: Toko Maju Jaya" style="width:100%;padding:12px;border-radius:10px;">
+        </div>
+        
+        <div class="fg">
+          <label>Pemilik Toko <span style="color:var(--red)">*</span></label>
+          <select id="saStoreOwner" style="width:100%;padding:12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
+            <option value="">Pilih pemilik...</option>
+          </select>
+        </div>
+        
+        <div class="fg">
+          <label>Alamat Toko</label>
+          <input type="text" id="saStoreAddress" placeholder="Jl. Contoh No. 123" style="width:100%;padding:12px;border-radius:10px;">
+        </div>
+        
+        <div class="fg">
+          <label>Nomor Telepon</label>
+          <input type="text" id="saStorePhone" placeholder="0812-xxxx-xxxx" style="width:100%;padding:12px;border-radius:10px;">
+        </div>
+        
+        <button class="btn-pay" onclick="createStore()" style="margin-top:10px;">
+          <span>🏪</span> Buat Toko
+        </button>
+      </div>
+    </div>
+    
+    <!-- PANEL: BUAT PEMILIK -->
+    <div id="saPanelCreateOwner" style="display:none;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;">
+        <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--accent);">👤 Buat Pemilik Baru</div>
+        
+        <div class="fg">
+          <label>Username <span style="color:var(--red)">*</span></label>
+          <input type="text" id="saOwnerUsername" placeholder="contoh: pemilik1" style="width:100%;padding:12px;border-radius:10px;">
+        </div>
+        
+        <div class="fg">
+          <label>Nama Lengkap <span style="color:var(--red)">*</span></label>
+          <input type="text" id="saOwnerNama" placeholder="Contoh: Budi Santoso" style="width:100%;padding:12px;border-radius:10px;">
+        </div>
+        
+        <div class="fg">
+          <label>Password <span style="color:var(--red)">*</span></label>
+          <input type="text" id="saOwnerPassword" placeholder="Min. 6 karakter" style="width:100%;padding:12px;border-radius:10px;">
+        </div>
+        
+        <button class="btn-pay" onclick="createOwner()" style="margin-top:10px;">
+          <span>👤</span> Buat Pemilik
+        </button>
+      </div>
+    </div>
+    
+    <!-- PANEL: AUDIT LOGS -->
+    <div id="saPanelLogs" style="display:none;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;">📋 Audit Logs (100 terakhir)</div>
+        <div id="superadminLogsList" style="max-height:50vh;overflow-y:auto;font-size:12px;">
+          <div style="text-align:center;color:var(--muted);padding:40px;">Memuat...</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Ghost Mode Info -->
+    <div id="saGhostModeBanner" style="display:none;background:rgba(245,166,35,.15);border:1px solid rgba(245,166,35,.3);border-radius:10px;padding:12px;margin-top:16px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:20px;">👻</span>
+        <div style="flex:1;">
+          <div style="font-weight:700;color:var(--accent);">Ghost Mode Aktif</div>
+          <div style="font-size:12px;color:var(--muted);">Anda sedang mengakses toko: <span id="saGhostStoreName" style="color:var(--text);font-weight:600;">-</span></div>
+        </div>
+        <button class="mbtn" style="background:var(--red);color:#fff;border:none;" onclick="exitGhostMode()">Keluar</button>
+      </div>
     </div>
   </div>
 </div>
@@ -5607,6 +5761,274 @@ function resetPassPengguna(id, nama) {
     .then(() => { showToast(`✅ Password ${nama} berhasil direset`); showLoading(false); })
     .catch(e => { showToast('❌ ' + e.message); showLoading(false); });
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  SUPERADMIN PANEL (MULTI-TENANT)
+// ═══════════════════════════════════════════════════════════════
+let superadminCurrentTab = 'stores';
+let superadminStores = [];
+let superadminOwners = [];
+
+function initSuperadmin() {
+  // Cek apakah user adalah superadmin
+  if (APP_USER && APP_USER.is_superadmin) {
+    document.getElementById('mSuperadmin').style.display = '';
+    loadStoreSwitcher();
+  }
+}
+
+function openSuperadminPanel() {
+  openM('mSuperadmin');
+  switchSuperadminTab('stores');
+  checkGhostMode();
+}
+
+function switchSuperadminTab(tab) {
+  superadminCurrentTab = tab;
+  
+  // Update tab buttons
+  ['Stores', 'Owners', 'CreateStore', 'CreateOwner', 'Logs'].forEach(t => {
+    document.getElementById('saTab' + t).classList.toggle('active', t.toLowerCase() === tab.toLowerCase());
+  });
+  
+  // Update panels
+  document.getElementById('saPanelStores').style.display = tab === 'stores' ? 'block' : 'none';
+  document.getElementById('saPanelOwners').style.display = tab === 'owners' ? 'block' : 'none';
+  document.getElementById('saPanelCreateStore').style.display = tab === 'createStore' ? 'block' : 'none';
+  document.getElementById('saPanelCreateOwner').style.display = tab === 'createOwner' ? 'block' : 'none';
+  document.getElementById('saPanelLogs').style.display = tab === 'logs' ? 'block' : 'none';
+  
+  // Load data
+  if (tab === 'stores') loadSuperadminStores();
+  if (tab === 'owners') loadSuperadminOwners();
+  if (tab === 'createStore') loadOwnersForSelect();
+  if (tab === 'logs') loadSuperadminLogs();
+}
+
+async function loadSuperadminStores() {
+  showLoading(true);
+  try {
+    const stores = await api('/api/admin/stores');
+    superadminStores = stores;
+    const el = document.getElementById('superadminStoresList');
+    
+    if (!stores.length) {
+      el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;">Belum ada toko</div>';
+    } else {
+      el.innerHTML = stores.map(s => `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+            <div>
+              <div style="font-weight:700;font-size:15px;">${s.name}</div>
+              <div style="font-size:12px;color:var(--muted);">@${s.slug}</div>
+            </div>
+            <span style="background:${s.is_active ? 'var(--green)' : 'var(--red)'};color:#111;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;">${s.is_active ? 'AKTIF' : 'NONAKTIF'}</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+            👤 Pemilik: ${s.owner_name || '-'}<br>
+            📍 ${s.address || '-'}<br>
+            📞 ${s.phone || '-'}<br>
+            📦 ${s.product_count || 0} produk · 🛒 ${s.transaction_count || 0} transaksi
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="mbtn pri" style="flex:1;padding:8px;font-size:12px;" onclick="enterGhostMode(${s.id}, '${s.name}')">
+              <span>👻</span> Masuk
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    showToast('❌ Gagal memuat toko: ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function loadSuperadminOwners() {
+  showLoading(true);
+  try {
+    const owners = await api('/api/admin/owners');
+    superadminOwners = owners;
+    const el = document.getElementById('superadminOwnersList');
+    
+    if (!owners.length) {
+      el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;">Belum ada pemilik</div>';
+    } else {
+      el.innerHTML = owners.map(o => `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-weight:700;font-size:15px;">${o.nama}</div>
+              <div style="font-size:12px;color:var(--muted);">@${o.username} · ${o.store_count} toko</div>
+            </div>
+            <span style="background:${o.aktif ? 'var(--green)' : 'var(--red)'};color:#111;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;">${o.aktif ? 'AKTIF' : 'NONAKTIF'}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    showToast('❌ Gagal memuat pemilik: ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function loadOwnersForSelect() {
+  try {
+    const owners = await api('/api/admin/owners');
+    const select = document.getElementById('saStoreOwner');
+    select.innerHTML = '<option value="">Pilih pemilik...</option>' + 
+      owners.map(o => `<option value="${o.id}">${o.nama} (@${o.username})</option>`).join('');
+  } catch(e) {
+    console.error('Gagal load owners:', e);
+  }
+}
+
+async function loadSuperadminLogs() {
+  showLoading(true);
+  try {
+    const logs = await api('/api/admin/logs');
+    const el = document.getElementById('superadminLogsList');
+    
+    if (!logs.length) {
+      el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;">Belum ada log</div>';
+    } else {
+      el.innerHTML = logs.map(l => `
+        <div style="border-bottom:1px solid var(--border);padding:10px 0;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);">
+            <span>${new Date(l.dibuat).toLocaleString('id-ID')}</span>
+            <span>${l.admin_name}</span>
+          </div>
+          <div style="font-size:13px;margin-top:4px;">
+            <strong>${l.action_type}</strong> ${l.store_name ? '· ' + l.store_name : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    showToast('❌ Gagal memuat logs: ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function createStore() {
+  const name = document.getElementById('saStoreName').value.trim();
+  const ownerId = document.getElementById('saStoreOwner').value;
+  const address = document.getElementById('saStoreAddress').value.trim();
+  const phone = document.getElementById('saStorePhone').value.trim();
+  
+  if (!name) { showToast('❌ Nama toko wajib diisi'); return; }
+  if (!ownerId) { showToast('❌ Pemilik wajib dipilih'); return; }
+  
+  showLoading(true);
+  try {
+    await api('/api/admin/stores', 'POST', { name, owner_id: ownerId, address, phone });
+    showToast('✅ Toko berhasil dibuat');
+    document.getElementById('saStoreName').value = '';
+    document.getElementById('saStoreAddress').value = '';
+    document.getElementById('saStorePhone').value = '';
+    switchSuperadminTab('stores');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function createOwner() {
+  const username = document.getElementById('saOwnerUsername').value.trim().toLowerCase();
+  const nama = document.getElementById('saOwnerNama').value.trim();
+  const password = document.getElementById('saOwnerPassword').value;
+  
+  if (!username || !nama || !password) { showToast('❌ Semua field wajib diisi'); return; }
+  if (password.length < 6) { showToast('❌ Password minimal 6 karakter'); return; }
+  
+  showLoading(true);
+  try {
+    await api('/api/admin/owners', 'POST', { username, nama, password });
+    showToast('✅ Pemilik berhasil dibuat');
+    document.getElementById('saOwnerUsername').value = '';
+    document.getElementById('saOwnerNama').value = '';
+    document.getElementById('saOwnerPassword').value = '';
+    switchSuperadminTab('owners');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function enterGhostMode(storeId, storeName) {
+  showLoading(true);
+  try {
+    await api(`/api/admin/enter-store/${storeId}`, 'POST');
+    document.getElementById('saGhostModeBanner').style.display = 'block';
+    document.getElementById('saGhostStoreName').textContent = storeName;
+    showToast(`👻 Ghost mode aktif: ${storeName}`);
+    closeM('mSuperadmin');
+    // Reload data dengan store baru
+    await muatProduk();
+    await muatKategori();
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function exitGhostMode() {
+  showLoading(true);
+  try {
+    await api('/api/admin/exit-store', 'POST');
+    document.getElementById('saGhostModeBanner').style.display = 'none';
+    showToast('✅ Keluar dari ghost mode');
+    // Reload data
+    await muatProduk();
+    await muatKategori();
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+function checkGhostMode() {
+  // Cek apakah sedang ghost mode (dari session)
+  // Ini akan dihandle oleh backend, tapi kita bisa cek dari data yang diload
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  STORE SWITCHER (UNTUK PEMILIK DENGAN MULTIPLE TOKO)
+// ═══════════════════════════════════════════════════════════════
+function loadStoreSwitcher() {
+  if (!APP_USER) return;
+  
+  // Gunakan APP_STORES dari backend atau fetch dari API
+  const stores = APP_STORES || [];
+  
+  if (stores.length > 1 || APP_USER.is_superadmin) {
+    const container = document.getElementById('storeSwitcherContainer');
+    const select = document.getElementById('storeSwitcher');
+    
+    container.style.display = 'block';
+    select.innerHTML = stores.map(s => 
+      `<option value="${s.id}">${s.name}</option>`
+    ).join('');
+  }
+}
+
+async function switchStore(storeId) {
+  showLoading(true);
+  try {
+    await api(`/api/switch-store/${storeId}`, 'POST');
+    showToast('✅ Berhasil pindah toko');
+    // Reload semua data
+    await muatProduk();
+    await muatKategori();
+    await muatPengaturan();
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+// Init saat halaman load
+document.addEventListener('DOMContentLoaded', initSuperadmin);
 
 // ══════════════════════════════════
 //  GANTI PASSWORD SENDIRI
