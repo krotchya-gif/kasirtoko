@@ -3235,6 +3235,193 @@ def laporan_chart():
     })
 
 
+# ═════════════════════════════════════
+#  API: LAPORAN STOK
+# ═════════════════════════════════════
+@app.route('/api/laporan/stok', methods=['GET'])
+@pemilik_required
+def laporan_stok():
+    """Laporan stok: hampir habis, opname, dan statistik."""
+    mode = request.args.get('mode', 'semua')  # semua, hampir_habis, opname
+    store_id = get_current_store_id()
+    
+    conn = get_db()
+    
+    # Base query dengan store_id filter
+    base_where = "WHERE (p.store_id = ? OR ? IS NULL) AND p.aktif = 1"
+    params = [store_id, store_id]
+    
+    if mode == 'hampir_habis':
+        # Stok <= stok_min atau stok <= 5 jika stok_min = 0
+        sql = f"""
+            SELECT p.*, 
+                   COALESCE(SUM(CASE WHEN sl.tipe = 'masuk' THEN sl.jumlah ELSE 0 END), 0) as total_masuk,
+                   COALESCE(SUM(CASE WHEN sl.tipe = 'keluar' THEN sl.jumlah ELSE 0 END), 0) as total_keluar
+            FROM produk p
+            LEFT JOIN stok_log sl ON sl.produk_id = p.id
+            {base_where}
+              AND (p.stok <= p.stok_min OR (p.stok_min = 0 AND p.stok <= 5))
+            GROUP BY p.id
+            ORDER BY p.stok ASC
+        """
+    elif mode == 'opname':
+        # Semua produk untuk stok opname
+        sql = f"""
+            SELECT p.*,
+                   COALESCE(SUM(CASE WHEN sl.tipe = 'masuk' THEN sl.jumlah ELSE 0 END), 0) as total_masuk,
+                   COALESCE(SUM(CASE WHEN sl.tipe = 'keluar' THEN sl.jumlah ELSE 0 END), 0) as total_keluar,
+                   COUNT(DISTINCT sl.id) as total_perubahan
+            FROM produk p
+            LEFT JOIN stok_log sl ON sl.produk_id = p.id
+            {base_where}
+            GROUP BY p.id
+            ORDER BY p.kategori, p.nama
+        """
+    else:
+        # Semua produk aktif
+        sql = f"""
+            SELECT p.*,
+                   COALESCE(SUM(CASE WHEN sl.tipe = 'masuk' THEN sl.jumlah ELSE 0 END), 0) as total_masuk,
+                   COALESCE(SUM(CASE WHEN sl.tipe = 'keluar' THEN sl.jumlah ELSE 0 END), 0) as total_keluar
+            FROM produk p
+            LEFT JOIN stok_log sl ON sl.produk_id = p.id
+            {base_where}
+            GROUP BY p.id
+            ORDER BY p.kategori, p.nama
+        """
+    
+    rows = db_execute(conn, sql, tuple(params)).fetchall()
+    
+    # Stats
+    total_produk = len(rows)
+    hampir_habis = sum(1 for r in rows if r['stok'] <= r['stok_min'] or (r['stok_min'] == 0 and r['stok'] <= 5))
+    stok_nol = sum(1 for r in rows if r['stok'] == 0)
+    total_nilai = sum(r['stok'] * r['harga_modal'] for r in rows)
+    
+    conn.close()
+    
+    return jsonify({
+        'mode': mode,
+        'stats': {
+            'total_produk': total_produk,
+            'hampir_habis': hampir_habis,
+            'stok_nol': stok_nol,
+            'total_nilai_stok': total_nilai
+        },
+        'produk': [row_to_dict(r) for r in rows]
+    })
+
+
+# ═════════════════════════════════════
+#  API: LAPORAN KEUANGAN
+# ═════════════════════════════════════
+@app.route('/api/laporan/keuangan', methods=['GET'])
+@pemilik_required
+def laporan_keuangan():
+    """Laporan keuangan: arus kas, laba/rugi."""
+    dari = request.args.get('dari', '')
+    ke   = request.args.get('ke', '')
+    store_id = get_current_store_id()
+    
+    if not dari:
+        dari = datetime.now().strftime('%Y-%m-%d')
+    if not ke:
+        ke = datetime.now().strftime('%Y-%m-%d')
+    
+    conn = get_db()
+    
+    # Arus Kas dari tabel kas
+    kas_masuk = db_execute(conn, """
+        SELECT COALESCE(SUM(jumlah), 0) as total, COUNT(*) as count
+        FROM kas
+        WHERE tipe = 'pemasukan'
+          AND DATE(waktu) >= ? AND DATE(waktu) <= ?
+          AND (store_id = ? OR ? IS NULL)
+    """, (dari, ke, store_id, store_id)).fetchone()
+    
+    kas_keluar = db_execute(conn, """
+        SELECT COALESCE(SUM(jumlah), 0) as total, COUNT(*) as count
+        FROM kas
+        WHERE tipe = 'pengeluaran'
+          AND DATE(waktu) >= ? AND DATE(waktu) <= ?
+          AND (store_id = ? OR ? IS NULL)
+    """, (dari, ke, store_id, store_id)).fetchone()
+    
+    # Pemasukan dari transaksi (penjualan)
+    penjualan = db_execute(conn, """
+        SELECT 
+            COALESCE(SUM(total), 0) as total,
+            COALESCE(SUM(diskon), 0) as diskon,
+            COUNT(*) as count
+        FROM transaksi
+        WHERE DATE(waktu) >= ? AND DATE(waktu) <= ?
+          AND COALESCE(status, 'aktif') = 'aktif'
+          AND (store_id = ? OR ? IS NULL)
+    """, (dari, ke, store_id, store_id)).fetchone()
+    
+    # Laba/Rugi (Omzet - Modal)
+    # Hitung laba kotor dari transaksi_item
+    laba = db_execute(conn, """
+        SELECT COALESCE(SUM(
+            (ti.harga - COALESCE(p.harga_modal, 0)) * ti.qty
+        ), 0) as laba_kotor
+        FROM transaksi_item ti
+        JOIN transaksi t ON t.id = ti.transaksi_id
+        LEFT JOIN produk p ON p.id = ti.produk_id
+        WHERE DATE(t.waktu) >= ? AND DATE(waktu) <= ?
+          AND COALESCE(t.status, 'aktif') = 'aktif'
+          AND (t.store_id = ? OR ? IS NULL)
+    """, (dari, ke, store_id, store_id)).fetchone()
+    
+    # Metode pembayaran breakdown
+    metode = db_execute(conn, """
+        SELECT metode_bayar, COALESCE(SUM(total), 0) as total, COUNT(*) as count
+        FROM transaksi
+        WHERE DATE(waktu) >= ? AND DATE(waktu) <= ?
+          AND COALESCE(status, 'aktif') = 'aktif'
+          AND (store_id = ? OR ? IS NULL)
+        GROUP BY metode_bayar
+    """, (dari, ke, store_id, store_id)).fetchall()
+    
+    # Harian breakdown
+    harian = db_execute(conn, """
+        SELECT 
+            DATE(waktu) as tanggal,
+            COALESCE(SUM(total), 0) as omzet,
+            COALESCE(SUM(diskon), 0) as diskon,
+            COUNT(*) as transaksi
+        FROM transaksi
+        WHERE DATE(waktu) >= ? AND DATE(waktu) <= ?
+          AND COALESCE(status, 'aktif') = 'aktif'
+          AND (store_id = ? OR ? IS NULL)
+        GROUP BY DATE(waktu)
+        ORDER BY DATE(waktu) ASC
+    """, (dari, ke, store_id, store_id)).fetchall()
+    
+    conn.close()
+    
+    return jsonify({
+        'periode': {'dari': dari, 'ke': ke},
+        'arus_kas': {
+            'pemasukan': {'total': kas_masuk['total'], 'count': kas_masuk['count']},
+            'pengeluaran': {'total': kas_keluar['total'], 'count': kas_keluar['count']},
+            'saldo': kas_masuk['total'] - kas_keluar['total']
+        },
+        'penjualan': {
+            'omzet': penjualan['total'],
+            'diskon': penjualan['diskon'],
+            'net': penjualan['total'] - penjualan['diskon'],
+            'transaksi': penjualan['count']
+        },
+        'laba_rugi': {
+            'laba_kotor': laba['laba_kotor'],
+            'estimasi_net': laba['laba_kotor'] - kas_keluar['total']
+        },
+        'metode_pembayaran': [row_to_dict(m) for m in metode],
+        'harian': [row_to_dict(h) for h in harian]
+    })
+
+
 # ─────────────────────────────────────
 #  API: EXPORT PDF LAPORAN
 # ─────────────────────────────────────

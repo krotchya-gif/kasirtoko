@@ -1461,6 +1461,8 @@ html.light body{color-scheme:light;}
       <button class="lap-tab" id="lapTab1" onclick="switchLapTab(1)">🏆 Terlaris</button>
       <button class="lap-tab" id="lapTab2" onclick="switchLapTab(2)">⚠️ Stok Rendah</button>
       <button class="lap-tab" id="lapTab3" onclick="switchLapTab(3)">📈 Grafik</button>
+      <button class="lap-tab" id="lapTab4" onclick="switchLapTab(4)">📦 Stok</button>
+      <button class="lap-tab" id="lapTab5" onclick="switchLapTab(5)">💰 Keuangan</button>
     </div>
     <!-- Filter tanggal (hanya untuk tab 0, 1, dan 3) -->
     <div class="date-filter" id="lapDateFilter">
@@ -1472,6 +1474,8 @@ html.light body{color-scheme:light;}
     <div id="lapTopContent" style="display:none;"></div>
     <div id="lapStokContent" style="display:none;"></div>
     <div id="lapChartContent" style="display:none;">
+    <div id="lapStokFullContent" style="display:none;"></div>
+    <div id="lapKeuanganContent" style="display:none;"></div>
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <button class="lap-tab" id="chartTabHarian" onclick="switchChartTab('harian')">📅 Harian</button>
         <button class="lap-tab" id="chartTabMingguan" onclick="switchChartTab('mingguan')">📆 Mingguan</button>
@@ -4927,15 +4931,18 @@ async function openLaporan() {
 
 function switchLapTab(idx) {
   lapTabIdx = idx;
-  [0,1,2,3].forEach(i => {
-    document.getElementById(`lapTab${i}`).classList.toggle('active', i === idx);
+  [0,1,2,3,4,5].forEach(i => {
+    const tab = document.getElementById(`lapTab${i}`);
+    if (tab) tab.classList.toggle('active', i === idx);
   });
   document.getElementById('lapContent').style.display    = idx === 0 ? '' : 'none';
   document.getElementById('lapTopContent').style.display = idx === 1 ? '' : 'none';
   document.getElementById('lapStokContent').style.display= idx === 2 ? '' : 'none';
   document.getElementById('lapChartContent').style.display= idx === 3 ? '' : 'none';
-  document.getElementById('lapDateFilter').style.display = idx === 0 || idx === 1 || idx === 3 ? '' : 'none';
-  document.getElementById('lapExportBtn').style.display  = idx === 0 ? '' : 'none';
+  document.getElementById('lapStokFullContent').style.display= idx === 4 ? '' : 'none';
+  document.getElementById('lapKeuanganContent').style.display= idx === 5 ? '' : 'none';
+  document.getElementById('lapDateFilter').style.display = idx === 0 || idx === 1 || idx === 3 || idx === 5 ? '' : 'none';
+  document.getElementById('lapExportBtn').style.display  = idx === 0 || idx === 4 ? '' : 'none';
   muatLapTab();
 }
 
@@ -4944,6 +4951,8 @@ async function muatLapTab() {
   else if (lapTabIdx === 1) await muatTopProduk();
   else if (lapTabIdx === 2) await muatStokRendah();
   else if (lapTabIdx === 3) await muatChart();
+  else if (lapTabIdx === 4) await muatLapStok();
+  else if (lapTabIdx === 5) await muatLapKeuangan();
 }
 
 // ══════════════════════════════════
@@ -5113,6 +5122,262 @@ async function muatChart() {
     document.getElementById('chartStats').innerHTML = '<div style="color:var(--red);text-align:center;">Gagal memuat grafik</div>';
   }
   
+  showLoading(false);
+}
+
+// ══════════════════════════════════
+//  LAPORAN STOK
+// ══════════════════════════════════
+async function muatLapStok() {
+  showLoading(true);
+  try {
+    const data = await api('/api/laporan/stok?mode=opname');
+    const el = document.getElementById('lapStokFullContent');
+    
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+        <div style="background:var(--surface2);padding:14px;border-radius:10px;text-align:center">
+          <div style="font-size:11px;color:var(--muted)">Total Produk</div>
+          <div style="font-size:22px;font-weight:800;color:var(--text)">${data.stats.total_produk}</div>
+        </div>
+        <div style="background:var(--surface2);padding:14px;border-radius:10px;text-align:center">
+          <div style="font-size:11px;color:var(--muted)">Hampir Habis</div>
+          <div style="font-size:22px;font-weight:800;color:var(--orange)">${data.stats.hampir_habis}</div>
+        </div>
+        <div style="background:var(--surface2);padding:14px;border-radius:10px;text-align:center">
+          <div style="font-size:11px;color:var(--muted)">Stok Habis</div>
+          <div style="font-size:22px;font-weight:800;color:var(--red)">${data.stats.stok_nol}</div>
+        </div>
+        <div style="background:var(--surface2);padding:14px;border-radius:10px;text-align:center">
+          <div style="font-size:11px;color:var(--muted)">Nilai Stok</div>
+          <div style="font-size:22px;font-weight:800;color:var(--green)">${fRp(data.stats.total_nilai_stok)}</div>
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="mbtn" onclick="exportStokCSV()">⬇️ Export Stok</button>
+        <button class="mbtn sec" onclick="filterStokHampirHabis()">⚠️ Hampir Habis</button>
+      </div>
+      
+      <div style="max-height:400px;overflow-y:auto;scrollbar-width:thin">
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          <thead style="position:sticky;top:0;background:var(--surface)">
+            <tr style="border-bottom:2px solid var(--border)">
+              <th style="padding:10px;text-align:left">Produk</th>
+              <th style="padding:10px;text-align:center">Stok</th>
+              <th style="padding:10px;text-align:center">Min</th>
+              <th style="padding:10px;text-align:right">Harga</th>
+              <th style="padding:10px;text-align:right">Nilai</th>
+              <th style="padding:10px;text-align:center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.produk.map(p => {
+              const status = p.stok === 0 ? '<span style="background:var(--red);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">Habis</span>' :
+                            (p.stok <= p.stok_min || (p.stok_min === 0 && p.stok <= 5)) ? '<span style="background:var(--orange);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">Hampir Habis</span>' :
+                            '<span style="background:var(--green);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">Aman</span>';
+              const nilai = p.stok * p.harga_modal;
+              return `<tr style="border-bottom:1px solid var(--border2)">
+                <td style="padding:10px"><span style="font-size:16px;margin-right:6px">${p.emoji}</span>${p.nama}</td>
+                <td style="padding:10px;text-align:center;font-weight:700">${p.stok}</td>
+                <td style="padding:10px;text-align:center;color:var(--muted)">${p.stok_min || '-'}</td>
+                <td style="padding:10px;text-align:right">${fRp(p.harga_modal)}</td>
+                <td style="padding:10px;text-align:right;font-weight:600">${fRp(nilai)}</td>
+                <td style="padding:10px;text-align:center">${status}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch(e) {
+    showToast('❌ Gagal memuat laporan stok: ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function filterStokHampirHabis() {
+  showLoading(true);
+  try {
+    const data = await api('/api/laporan/stok?mode=hampir_habis');
+    const el = document.getElementById('lapStokFullContent');
+    
+    el.innerHTML = `
+      <div style="background:var(--orange);color:#fff;padding:12px 16px;border-radius:10px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:700">⚠️ Produk Hampir Habis / Stok Rendah</div>
+        <button class="mbtn" style="background:#fff;color:var(--orange)" onclick="muatLapStok()">Lihat Semua</button>
+      </div>
+      
+      <div style="max-height:400px;overflow-y:auto;scrollbar-width:thin">
+        ${data.produk.length === 0 ? '<div style="text-align:center;padding:40px;color:var(--muted)">Tidak ada produk dengan stok rendah ✅</div>' : `
+        <table style="width:100%;font-size:13px;border-collapse:collapse">
+          <thead style="position:sticky;top:0;background:var(--surface)">
+            <tr style="border-bottom:2px solid var(--border)">
+              <th style="padding:10px;text-align:left">Produk</th>
+              <th style="padding:10px;text-align:center">Stok</th>
+              <th style="padding:10px;text-align:center">Min</th>
+              <th style="padding:10px;text-align:right">Harga Jual</th>
+              <th style="padding:10px;text-align:center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.produk.map(p => `
+              <tr style="border-bottom:1px solid var(--border2)">
+                <td style="padding:10px"><span style="font-size:16px;margin-right:6px">${p.emoji}</span>${p.nama}</td>
+                <td style="padding:10px;text-align:center;font-weight:700;color:var(--red)">${p.stok}</td>
+                <td style="padding:10px;text-align:center;color:var(--muted)">${p.stok_min || '-'}</td>
+                <td style="padding:10px;text-align:right">${fRp(p.harga)}</td>
+                <td style="padding:10px;text-align:center">
+                  <button class="mbtn" style="padding:4px 12px;font-size:11px" onclick="openTambahStok(${p.id}, '${p.nama.replace(/'/g, "\\'")}')">+ Stok</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        `}
+      </div>
+    `;
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+function openTambahStok(id, nama) {
+  const tambah = prompt(`Tambah stok untuk "${nama}":\nMasukkan jumlah stok yang ingin ditambahkan:`, '10');
+  if (tambah && parseInt(tambah) > 0) {
+    // Buka modal adjust stok
+    openKelola();
+    showToast(`Silakan adjust stok untuk ${nama} di menu Kelola Produk`);
+  }
+}
+
+function exportStokCSV() {
+  showToast('📥 Export stok ke CSV...');
+  // Implementasi export akan ditambahkan
+}
+
+// ══════════════════════════════════
+//  LAPORAN KEUANGAN
+// ══════════════════════════════════
+async function muatLapKeuangan() {
+  const dari = document.getElementById('lDari').value;
+  const ke   = document.getElementById('lKe').value;
+  
+  showLoading(true);
+  try {
+    const data = await api(`/api/laporan/keuangan?dari=${dari}&ke=${ke}`);
+    const el = document.getElementById('lapKeuanganContent');
+    
+    el.innerHTML = `
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Periode: ${new Date(data.periode.dari).toLocaleDateString('id-ID')} - ${new Date(data.periode.ke).toLocaleDateString('id-ID')}</div>
+      
+      <!-- Arus Kas -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--accent)">💰 Arus Kas</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="text-align:center;padding:12px;background:var(--surface);border-radius:8px">
+            <div style="font-size:11px;color:var(--muted)">Pemasukan</div>
+            <div style="font-size:18px;font-weight:800;color:var(--green)">${fRp(data.arus_kas.pemasukan.total)}</div>
+            <div style="font-size:11px;color:var(--muted)">${data.arus_kas.pemasukan.count} transaksi</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--surface);border-radius:8px">
+            <div style="font-size:11px;color:var(--muted)">Pengeluaran</div>
+            <div style="font-size:18px;font-weight:800;color:var(--red)">${fRp(data.arus_kas.pengeluaran.total)}</div>
+            <div style="font-size:11px;color:var(--muted)">${data.arus_kas.pengeluaran.count} transaksi</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--surface);border-radius:8px">
+            <div style="font-size:11px;color:var(--muted)">Saldo</div>
+            <div style="font-size:18px;font-weight:800;color:${data.arus_kas.saldo >= 0 ? 'var(--green)' : 'var(--red)'}">${fRp(data.arus_kas.saldo)}</div>
+            <div style="font-size:11px;color:var(--muted)">Net</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Penjualan -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--accent)">📊 Penjualan</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <div style="text-align:center">
+            <div style="font-size:11px;color:var(--muted)">Omzet</div>
+            <div style="font-size:16px;font-weight:800;color:var(--text)">${fRp(data.penjualan.omzet)}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px;color:var(--muted)">Diskon</div>
+            <div style="font-size:16px;font-weight:800;color:var(--purple)">${fRp(data.penjualan.diskon)}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px;color:var(--muted)">Net</div>
+            <div style="font-size:16px;font-weight:800;color:var(--green)">${fRp(data.penjualan.net)}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:11px;color:var(--muted)">Transaksi</div>
+            <div style="font-size:16px;font-weight:800;color:var(--blue)">${data.penjualan.transaksi}</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Laba/Rugi -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--accent)">📈 Laba / Rugi</div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+          <div style="text-align:center;padding:12px;background:var(--surface);border-radius:8px">
+            <div style="font-size:11px;color:var(--muted)">Laba Kotor (Estimasi)</div>
+            <div style="font-size:20px;font-weight:800;color:${data.laba_rugi.laba_kotor >= 0 ? 'var(--green)' : 'var(--red)'}">${fRp(data.laba_rugi.laba_kotor)}</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--surface);border-radius:8px">
+            <div style="font-size:11px;color:var(--muted)">Estimasi Net (Setelah Pengeluaran)</div>
+            <div style="font-size:20px;font-weight:800;color:${data.laba_rugi.estimasi_net >= 0 ? 'var(--green)' : 'var(--red)'}">${fRp(data.laba_rugi.estimasi_net)}</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Metode Pembayaran -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--accent)">💳 Pembayaran</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          ${data.metode_pembayaran.map(m => `
+            <div style="flex:1;min-width:120px;text-align:center;padding:12px;background:var(--surface);border-radius:8px">
+              <div style="font-size:11px;color:var(--muted)">${m.metode_bayar.toUpperCase()}</div>
+              <div style="font-size:16px;font-weight:800;color:var(--text)">${fRp(m.total)}</div>
+              <div style="font-size:11px;color:var(--muted)">${m.count} trx</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      
+      <!-- Harian -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--accent)">📅 Detail Harian</div>
+        <div style="max-height:200px;overflow-y:auto;scrollbar-width:thin">
+          <table style="width:100%;font-size:12px;border-collapse:collapse">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border)">
+                <th style="padding:8px;text-align:left">Tanggal</th>
+                <th style="padding:8px;text-align:center">Trx</th>
+                <th style="padding:8px;text-align:right">Omzet</th>
+                <th style="padding:8px;text-align:right">Diskon</th>
+                <th style="padding:8px;text-align:right">Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.harian.map(h => `
+                <tr style="border-bottom:1px solid var(--border2)">
+                  <td style="padding:8px">${new Date(h.tanggal).toLocaleDateString('id-ID', {weekday:'short',day:'numeric',month:'short'})}</td>
+                  <td style="padding:8px;text-align:center">${h.transaksi}</td>
+                  <td style="padding:8px;text-align:right">${fRp(h.omzet)}</td>
+                  <td style="padding:8px;text-align:right;color:var(--purple)">${fRp(h.diskon)}</td>
+                  <td style="padding:8px;text-align:right;font-weight:600">${fRp(h.omzet - h.diskon)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    showToast('❌ Gagal memuat laporan keuangan: ' + e.message);
+  }
   showLoading(false);
 }
 
