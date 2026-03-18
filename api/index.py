@@ -406,7 +406,135 @@ def init_db():
             )
         """)
 
-    # Tabel pengguna (login + role)
+    # ═════════════════════════════════════
+    #  MULTI-TENANT TABLES
+    # ═════════════════════════════════════
+    
+    # Tabel users (multi-role: superadmin, pemilik, karyawan)
+    if USE_POSTGRES:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            SERIAL PRIMARY KEY,
+                username      TEXT    NOT NULL UNIQUE,
+                nama          TEXT    NOT NULL,
+                password      TEXT    NOT NULL,
+                role          TEXT    NOT NULL DEFAULT 'karyawan' CHECK(role IN ('superadmin','pemilik','karyawan')),
+                is_superadmin INTEGER NOT NULL DEFAULT 0,
+                aktif         INTEGER NOT NULL DEFAULT 1,
+                dibuat        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                nama          TEXT    NOT NULL,
+                password      TEXT    NOT NULL,
+                role          TEXT    NOT NULL DEFAULT 'karyawan' CHECK(role IN ('superadmin','pemilik','karyawan')),
+                is_superadmin INTEGER NOT NULL DEFAULT 0,
+                aktif         INTEGER NOT NULL DEFAULT 1,
+                dibuat        TEXT    DEFAULT (datetime('now','localtime'))
+            )
+        """)
+
+    # Tabel stores (toko/cabang)
+    if USE_POSTGRES:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS stores (
+                id          SERIAL PRIMARY KEY,
+                name        TEXT    NOT NULL,
+                slug        TEXT    NOT NULL UNIQUE,
+                address     TEXT,
+                phone       TEXT,
+                email       TEXT,
+                owner_id    INTEGER NOT NULL,
+                is_active   INTEGER NOT NULL DEFAULT 1,
+                dibuat      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS stores (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    NOT NULL,
+                slug        TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                address     TEXT,
+                phone       TEXT,
+                email       TEXT,
+                owner_id    INTEGER NOT NULL,
+                is_active   INTEGER NOT NULL DEFAULT 1,
+                dibuat      TEXT    DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """)
+
+    # Tabel user_stores (relasi karyawan ke toko)
+    if USE_POSTGRES:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS user_stores (
+                id          SERIAL PRIMARY KEY,
+                user_id     INTEGER NOT NULL,
+                store_id    INTEGER NOT NULL,
+                role        TEXT    NOT NULL CHECK(role IN ('admin','kasir')),
+                dibuat      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
+                UNIQUE(user_id, store_id)
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS user_stores (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id     INTEGER NOT NULL,
+                store_id    INTEGER NOT NULL,
+                role        TEXT    NOT NULL CHECK(role IN ('admin','kasir')),
+                dibuat      TEXT    DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE,
+                UNIQUE(user_id, store_id)
+            )
+        """)
+
+    # Tabel admin_logs (audit trail superadmin)
+    if USE_POSTGRES:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS admin_logs (
+                id           SERIAL PRIMARY KEY,
+                admin_id     INTEGER NOT NULL,
+                store_id     INTEGER,
+                action_type  TEXT    NOT NULL,
+                target_table TEXT,
+                target_id    INTEGER,
+                old_value    TEXT,
+                new_value    TEXT,
+                ip_address   TEXT,
+                dibuat       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (admin_id) REFERENCES users(id),
+                FOREIGN KEY (store_id) REFERENCES stores(id)
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS admin_logs (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                admin_id     INTEGER NOT NULL,
+                store_id     INTEGER,
+                action_type  TEXT    NOT NULL,
+                target_table TEXT,
+                target_id    INTEGER,
+                old_value    TEXT,
+                new_value    TEXT,
+                ip_address   TEXT,
+                dibuat       TEXT    DEFAULT (datetime('now','localtime')),
+                FOREIGN KEY (admin_id) REFERENCES users(id),
+                FOREIGN KEY (store_id) REFERENCES stores(id)
+            )
+        """)
+
+    # Tabel pengguna (LEGACY - backward compatibility)
     if USE_POSTGRES:
         c.execute("""
             CREATE TABLE IF NOT EXISTS pengguna (
@@ -510,9 +638,127 @@ def init_db():
             produk_default
         )
 
+    # ═════════════════════════════════════
+    #  MULTI-TENANT MIGRATION
+    # ═════════════════════════════════════
+    migrate_multi_tenant(c, USE_POSTGRES)
+
     conn.commit()
     conn.close()
     print(f"✅ Database siap: {DB_PATH}")
+
+
+def migrate_multi_tenant(c, use_postgres):
+    """Migrasi data existing ke multi-tenant schema"""
+    
+    # 1. Cek apakah sudah ada superadmin
+    c.execute("SELECT COUNT(*) as count FROM users WHERE is_superadmin = 1")
+    has_superadmin = c.fetchone()['count'] > 0
+    
+    if not has_superadmin:
+        # Buat superadmin default
+        _hash = lambda pw: generate_password_hash(pw, method='pbkdf2:sha256')
+        c.execute(
+            "INSERT INTO users (username, nama, password, role, is_superadmin) VALUES (?,?,?,?,?)",
+            ('superadmin', 'Super Administrator', _hash('superadmin123'), 'superadmin', 1)
+        )
+        print("✅ Superadmin dibuat: superadmin/superadmin123")
+    
+    # 2. Migrasi pengguna lama ke users (jika belum)
+    c.execute("SELECT COUNT(*) as count FROM users WHERE role = 'pemilik'")
+    has_pemilik = c.fetchone()['count'] > 0
+    
+    if not has_pemilik:
+        # Copy data dari pengguna ke users
+        c.execute("SELECT * FROM pengguna WHERE role = 'pemilik'")
+        pemilik_rows = c.fetchall()
+        for row in pemilik_rows:
+            try:
+                c.execute(
+                    "INSERT INTO users (username, nama, password, role, is_superadmin) VALUES (?,?,?,?,?)",
+                    (row['username'], row['nama'], row['password'], 'pemilik', 0)
+                )
+            except Exception:
+                pass  # Skip jika username sudah ada
+        
+        # Copy karyawan
+        c.execute("SELECT * FROM pengguna WHERE role = 'karyawan'")
+        karyawan_rows = c.fetchall()
+        for row in karyawan_rows:
+            try:
+                c.execute(
+                    "INSERT INTO users (username, nama, password, role, is_superadmin) VALUES (?,?,?,?,?)",
+                    (row['username'], row['nama'], row['password'], 'karyawan', 0)
+                )
+            except Exception:
+                pass
+        print("✅ Data pengguna dimigrasi ke users")
+    
+    # 3. Buat toko dari pengaturan (jika belum ada toko)
+    c.execute("SELECT COUNT(*) as count FROM stores")
+    has_stores = c.fetchone()['count'] > 0
+    
+    if not has_stores:
+        # Ambil data pengaturan
+        c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'nama_toko'")
+        result = c.fetchone()
+        nama_toko = result['nilai'] if result else 'Toko Saya'
+        
+        c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'alamat'")
+        result = c.fetchone()
+        alamat = result['nilai'] if result else ''
+        
+        c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'telp'")
+        result = c.fetchone()
+        telp = result['nilai'] if result else ''
+        
+        # Buat slug dari nama toko
+        import re
+        slug = re.sub(r'[^\w\s-]', '', nama_toko).strip().lower()
+        slug = re.sub(r'[-\s]+', '-', slug)[:50]
+        if not slug:
+            slug = 'toko-saya'
+        
+        # Ambil pemilik pertama
+        c.execute("SELECT id FROM users WHERE role = 'pemilik' ORDER BY id LIMIT 1")
+        pemilik = c.fetchone()
+        owner_id = pemilik['id'] if pemilik else 1
+        
+        try:
+            c.execute(
+                "INSERT INTO stores (name, slug, address, phone, owner_id) VALUES (?,?,?,?,?)",
+                (nama_toko, slug, alamat, telp, owner_id)
+            )
+            print(f"✅ Toko '{nama_toko}' dibuat dengan slug '{slug}'")
+        except Exception as e:
+            # Jika slug sudah ada, tambahkan angka
+            slug = f"{slug}-1"
+            c.execute(
+                "INSERT INTO stores (name, slug, address, phone, owner_id) VALUES (?,?,?,?,?)",
+                (nama_toko, slug, alamat, telp, owner_id)
+            )
+            print(f"✅ Toko '{nama_toko}' dibuat dengan slug '{slug}'")
+    
+    # 4. Tambah kolom store_id ke tabel existing (jika belum)
+    tables_to_update = ['produk', 'transaksi', 'kas', 'pelanggan', 'stok_log', 'tutup_kasir']
+    
+    for table in tables_to_update:
+        try:
+            if use_postgres:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN store_id INTEGER DEFAULT 1")
+            else:
+                c.execute(f"ALTER TABLE {table} ADD COLUMN store_id INTEGER DEFAULT 1")
+        except Exception:
+            pass  # Kolom sudah ada
+    
+    # 5. Update semua data existing dengan store_id = 1
+    for table in tables_to_update:
+        try:
+            c.execute(f"UPDATE {table} SET store_id = 1 WHERE store_id IS NULL")
+        except Exception:
+            pass
+    
+    print("✅ Data existing diupdate dengan store_id = 1")
 
 
 # ─────────────────────────────────────
@@ -565,20 +811,158 @@ def get_current_user():
     if not uid:
         return None
     conn = get_db()
+    # Coba dari tabel users (new) dulu
     user = db_execute(conn, 
-        "SELECT id, username, nama, role FROM pengguna WHERE id=? AND aktif=1", (uid,)
+        "SELECT id, username, nama, role, is_superadmin FROM users WHERE id=? AND aktif=1", (uid,)
     ).fetchone()
+    # Fallback ke pengguna (legacy)
+    if not user:
+        user = db_execute(conn, 
+            "SELECT id, username, nama, role, 0 as is_superadmin FROM pengguna WHERE id=? AND aktif=1", (uid,)
+        ).fetchone()
     conn.close()
     return row_to_dict(user) if user else None
 
 
+def get_current_store_id():
+    """Ambil store_id aktif dari session. Default 1 untuk backward compatibility."""
+    return session.get('current_store_id', 1)
+
+
+# ═════════════════════════════════════
+#  PERMISSION HELPERS (MULTI-TENANT)
+# ═════════════════════════════════════
+def is_superadmin(user_id=None):
+    """Cek apakah user adalah superadmin."""
+    if user_id is None:
+        user = get_current_user()
+        if not user:
+            return False
+        user_id = user['id']
+    conn = get_db()
+    result = db_execute(conn, 
+        "SELECT is_superadmin FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    conn.close()
+    return result and result['is_superadmin'] == 1
+
+
+def is_store_owner(user_id, store_id):
+    """Cek apakah user adalah owner dari toko tertentu."""
+    conn = get_db()
+    result = db_execute(conn,
+        "SELECT 1 FROM stores WHERE id = ? AND owner_id = ?",
+        (store_id, user_id)
+    ).fetchone()
+    conn.close()
+    return result is not None
+
+
+def can_access_store(user_id, store_id):
+    """Cek apakah user bisa akses toko (superadmin, owner, atau assigned)."""
+    if is_superadmin(user_id):
+        return True
+    if is_store_owner(user_id, store_id):
+        return True
+    
+    conn = get_db()
+    result = db_execute(conn,
+        "SELECT 1 FROM user_stores WHERE user_id = ? AND store_id = ?",
+        (user_id, store_id)
+    ).fetchone()
+    conn.close()
+    return result is not None
+
+
+def can_manage_products(user_id, store_id):
+    """Cek apakah user bisa manage produk (superadmin, owner, atau admin)."""
+    if is_superadmin(user_id):
+        return True
+    if is_store_owner(user_id, store_id):
+        return True
+    
+    conn = get_db()
+    result = db_execute(conn,
+        "SELECT role FROM user_stores WHERE user_id = ? AND store_id = ?",
+        (user_id, store_id)
+    ).fetchone()
+    conn.close()
+    return result and result['role'] == 'admin'
+
+
+def get_accessible_stores(user_id):
+    """List semua toko yang bisa diakses user."""
+    conn = get_db()
+    if is_superadmin(user_id):
+        stores = rows_to_list(db_execute(conn, 
+            "SELECT * FROM stores WHERE is_active = 1 ORDER BY name"
+        ).fetchall())
+    else:
+        stores = rows_to_list(db_execute(conn,"""
+            SELECT DISTINCT s.* FROM stores s
+            LEFT JOIN user_stores us ON s.id = us.store_id
+            WHERE s.is_active = 1 
+              AND (s.owner_id = ? OR us.user_id = ?)
+            ORDER BY s.name
+        """, (user_id, user_id)).fetchall())
+    conn.close()
+    return stores
+
+
+def log_admin_action(admin_id, store_id, action_type, target_table=None, target_id=None, old_value=None, new_value=None):
+    """Catat action superadmin untuk audit trail."""
+    conn = get_db()
+    try:
+        db_execute(conn, """
+            INSERT INTO admin_logs (admin_id, store_id, action_type, target_table, target_id, old_value, new_value, ip_address)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (admin_id, store_id, action_type, target_table, target_id, 
+              json.dumps(old_value) if old_value else None,
+              json.dumps(new_value) if new_value else None,
+              request.remote_addr))
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
+
+
+# ═════════════════════════════════════
+#  DECORATORS
+# ═════════════════════════════════════
 def pemilik_required(f):
-    """Decorator: hanya pemilik yang bisa akses endpoint ini."""
+    """Decorator: hanya pemilik atau superadmin yang bisa akses."""
     @functools.wraps(f)
     def decorated(*args, **kwargs):
         user = get_current_user()
-        if not user or user['role'] != 'pemilik':
-            return jsonify({'error': 'Akses ditolak — hanya untuk Pemilik Toko'}), 403
+        if not user:
+            return jsonify({'error': 'Sesi berakhir. Silakan login kembali.'}), 401
+        if user.get('is_superadmin') == 1 or user.get('role') in ('superadmin', 'pemilik'):
+            return f(*args, **kwargs)
+        return jsonify({'error': 'Akses ditolak — hanya untuk Pemilik Toko'}), 403
+    return decorated
+
+
+def superadmin_required(f):
+    """Decorator: hanya superadmin yang bisa akses."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user or user.get('is_superadmin') != 1:
+            return jsonify({'error': 'Akses ditolak — hanya untuk Superadmin'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_store_access(f):
+    """Decorator: cek apakah user bisa akses store_id di session."""
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': 'Sesi berakhir. Silakan login kembali.'}), 401
+        store_id = session.get('current_store_id', 1)
+        if not can_access_store(user['id'], store_id):
+            return jsonify({'error': 'Akses ditolak — Anda tidak memiliki akses ke toko ini'}), 403
         return f(*args, **kwargs)
     return decorated
 
@@ -613,21 +997,42 @@ def login():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         conn = get_db()
+        # Coba login ke tabel users (new) dulu
         if USE_POSTGRES:
             user = db_execute(conn, 
-                "SELECT * FROM pengguna WHERE username ILIKE %s AND aktif=1",
+                "SELECT * FROM users WHERE username ILIKE %s AND aktif=1",
                 (username,)
             ).fetchone()
         else:
             user = db_execute(conn, 
-                "SELECT * FROM pengguna WHERE username=? COLLATE NOCASE AND aktif=1",
+                "SELECT * FROM users WHERE username=? COLLATE NOCASE AND aktif=1",
                 (username,)
             ).fetchone()
+        # Fallback ke pengguna (legacy)
+        if not user:
+            if USE_POSTGRES:
+                user = db_execute(conn, 
+                    "SELECT * FROM pengguna WHERE username ILIKE %s AND aktif=1",
+                    (username,)
+                ).fetchone()
+            else:
+                user = db_execute(conn, 
+                    "SELECT * FROM pengguna WHERE username=? COLLATE NOCASE AND aktif=1",
+                    (username,)
+                ).fetchone()
         conn.close()
         if user and check_password_hash(user['password'], password):
             session.clear()
             session['user_id'] = user['id']
             session.permanent = True
+            # Set default store untuk pemilik/karyawan
+            if user.get('is_superadmin') != 1 and user.get('role') != 'superadmin':
+                conn = get_db()
+                # Ambil toko pertama yang bisa diakses
+                stores = get_accessible_stores(user['id'])
+                if stores:
+                    session['current_store_id'] = stores[0]['id']
+                conn.close()
             return redirect('/')
         error = 'Username atau password salah.'
     return render_template('login.html', error=error)
@@ -648,6 +1053,296 @@ def service_worker():
 @app.route('/offline')
 def offline():
     return render_template('offline.html')
+
+
+# ═════════════════════════════════════
+#  API: SUPERADMIN (MULTI-TENANT)
+# ═════════════════════════════════════
+
+@app.route('/api/admin/stores', methods=['GET'])
+@superadmin_required
+def admin_list_stores():
+    """List semua toko untuk superadmin."""
+    conn = get_db()
+    stores = rows_to_list(db_execute(conn, """
+        SELECT s.*, u.nama as owner_name, u.username as owner_username,
+               (SELECT COUNT(*) FROM produk WHERE store_id = s.id) as product_count,
+               (SELECT COUNT(*) FROM transaksi WHERE store_id = s.id) as transaction_count
+        FROM stores s
+        LEFT JOIN users u ON s.owner_id = u.id
+        ORDER BY s.dibuat DESC
+    """).fetchall())
+    conn.close()
+    return jsonify(stores)
+
+
+@app.route('/api/admin/stores', methods=['POST'])
+@superadmin_required
+def admin_create_store():
+    """Buat toko baru dan assign pemilik."""
+    data = request.json
+    name = data.get('name', '').strip()
+    owner_id = data.get('owner_id')
+    address = data.get('address', '').strip()
+    phone = data.get('phone', '').strip()
+    
+    if not name:
+        return jsonify({'error': 'Nama toko wajib diisi'}), 400
+    if not owner_id:
+        return jsonify({'error': 'Pemilik toko wajib dipilih'}), 400
+    
+    # Buat slug
+    import re
+    slug = re.sub(r'[^\w\s-]', '', name).strip().lower()
+    slug = re.sub(r'[-\s]+', '-', slug)[:50]
+    
+    conn = get_db()
+    try:
+        # Cek apakah owner valid
+        owner = db_execute(conn, "SELECT id FROM users WHERE id = ? AND role = 'pemilik'", (owner_id,)).fetchone()
+        if not owner:
+            conn.close()
+            return jsonify({'error': 'Pemilik tidak valid'}), 400
+        
+        # Insert toko
+        cur = db_execute_insert(conn,
+            "INSERT INTO stores (name, slug, address, phone, owner_id) VALUES (?,?,?,?,?)",
+            (name, slug, address, phone, owner_id)
+        )
+        store_id = cur.lastrowid
+        
+        # Log action
+        log_admin_action(session['user_id'], store_id, 'create_store', 'stores', store_id, None, {'name': name, 'owner_id': owner_id})
+        
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'store_id': store_id, 'slug': slug}), 201
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/owners', methods=['POST'])
+@superadmin_required
+def admin_create_owner():
+    """Buat akun pemilik baru."""
+    data = request.json
+    username = data.get('username', '').strip().lower()
+    nama = data.get('nama', '').strip()
+    password = data.get('password', '')
+    
+    if not username or not nama or not password:
+        return jsonify({'error': 'Username, nama, dan password wajib diisi'}), 400
+    
+    if len(password) < 6:
+        return jsonify({'error': 'Password minimal 6 karakter'}), 400
+    
+    conn = get_db()
+    try:
+        # Cek username sudah ada
+        existing = db_execute(conn, "SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({'error': 'Username sudah digunakan'}), 400
+        
+        # Insert pemilik
+        _hash = generate_password_hash(password, method='pbkdf2:sha256')
+        cur = db_execute_insert(conn,
+            "INSERT INTO users (username, nama, password, role, is_superadmin) VALUES (?,?,?,?,?)",
+            (username, nama, _hash, 'pemilik', 0)
+        )
+        user_id = cur.lastrowid
+        
+        # Log action
+        log_admin_action(session['user_id'], None, 'create_owner', 'users', user_id, None, {'username': username, 'nama': nama})
+        
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'user_id': user_id}), 201
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/owners', methods=['GET'])
+@superadmin_required
+def admin_list_owners():
+    """List semua pemilik yang belum punya toko atau semua pemilik."""
+    conn = get_db()
+    owners = rows_to_list(db_execute(conn, """
+        SELECT u.*, 
+               (SELECT COUNT(*) FROM stores WHERE owner_id = u.id) as store_count
+        FROM users u
+        WHERE u.role = 'pemilik'
+        ORDER BY u.dibuat DESC
+    """).fetchall())
+    conn.close()
+    return jsonify(owners)
+
+
+@app.route('/api/admin/enter-store/<int:store_id>', methods=['POST'])
+@superadmin_required
+def admin_enter_store(store_id):
+    """Superadmin masuk ke toko tertentu (ghost mode)."""
+    conn = get_db()
+    store = db_execute(conn, "SELECT * FROM stores WHERE id = ? AND is_active = 1", (store_id,)).fetchone()
+    conn.close()
+    
+    if not store:
+        return jsonify({'error': 'Toko tidak ditemukan'}), 404
+    
+    session['current_store_id'] = store_id
+    session['is_ghost_mode'] = True
+    
+    # Log action
+    log_admin_action(session['user_id'], store_id, 'enter_store', None, None, None, {'ghost_mode': True})
+    
+    return jsonify({'ok': True, 'store': row_to_dict(store)})
+
+
+@app.route('/api/admin/exit-store', methods=['POST'])
+@superadmin_required
+def admin_exit_store():
+    """Superadmin keluar dari ghost mode."""
+    store_id = session.get('current_store_id')
+    session.pop('current_store_id', None)
+    session.pop('is_ghost_mode', None)
+    
+    if store_id:
+        log_admin_action(session['user_id'], store_id, 'exit_store', None, None, None, None)
+    
+    return jsonify({'ok': True})
+
+
+@app.route('/api/admin/logs', methods=['GET'])
+@superadmin_required
+def admin_get_logs():
+    """Get audit logs."""
+    conn = get_db()
+    logs = rows_to_list(db_execute(conn, """
+        SELECT al.*, u.nama as admin_name, s.name as store_name
+        FROM admin_logs al
+        LEFT JOIN users u ON al.admin_id = u.id
+        LEFT JOIN stores s ON al.store_id = s.id
+        ORDER BY al.dibuat DESC
+        LIMIT 100
+    """).fetchall())
+    conn.close()
+    return jsonify(logs)
+
+
+# ═════════════════════════════════════
+#  API: USER STORES (KARYAWAN ASSIGNMENT)
+# ═════════════════════════════════════
+
+@app.route('/api/stores/<int:store_id>/users', methods=['GET'])
+@pemilik_required
+def list_store_users(store_id):
+    """List semua karyawan di toko ini."""
+    user = get_current_user()
+    if not can_access_store(user['id'], store_id):
+        return jsonify({'error': 'Akses ditolak'}), 403
+    
+    conn = get_db()
+    users = rows_to_list(db_execute(conn, """
+        SELECT us.*, u.username, u.nama, u.aktif
+        FROM user_stores us
+        JOIN users u ON us.user_id = u.id
+        WHERE us.store_id = ?
+        ORDER BY u.nama
+    """, (store_id,)).fetchall())
+    conn.close()
+    return jsonify(users)
+
+
+@app.route('/api/stores/<int:store_id>/users', methods=['POST'])
+@pemilik_required
+def add_store_user(store_id):
+    """Tambah karyawan ke toko."""
+    user = get_current_user()
+    if not is_store_owner(user['id'], store_id):
+        return jsonify({'error': 'Hanya pemilik yang bisa menambah karyawan'}), 403
+    
+    data = request.json
+    username = data.get('username', '').strip().lower()
+    nama = data.get('nama', '').strip()
+    password = data.get('password', '')
+    role = data.get('role', 'kasir')  # admin atau kasir
+    
+    if not username or not nama or not password:
+        return jsonify({'error': 'Semua field wajib diisi'}), 400
+    
+    conn = get_db()
+    try:
+        # Cek apakah user sudah ada
+        existing = db_execute(conn, "SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({'error': 'Username sudah digunakan'}), 400
+        
+        # Buat user karyawan
+        _hash = generate_password_hash(password, method='pbkdf2:sha256')
+        cur = db_execute_insert(conn,
+            "INSERT INTO users (username, nama, password, role, is_superadmin) VALUES (?,?,?,?,?)",
+            (username, nama, _hash, 'karyawan', 0)
+        )
+        user_id = cur.lastrowid
+        
+        # Assign ke toko
+        db_execute(conn,
+            "INSERT INTO user_stores (user_id, store_id, role) VALUES (?,?,?)",
+            (user_id, store_id, role)
+        )
+        
+        conn.commit()
+        conn.close()
+        return jsonify({'ok': True, 'user_id': user_id}), 201
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/stores/<int:store_id>/users/<int:user_id>', methods=['DELETE'])
+@pemilik_required
+def remove_store_user(store_id, user_id):
+    """Hapus karyawan dari toko."""
+    user = get_current_user()
+    if not is_store_owner(user['id'], store_id):
+        return jsonify({'error': 'Hanya pemilik yang bisa menghapus karyawan'}), 403
+    
+    conn = get_db()
+    db_execute(conn, "DELETE FROM user_stores WHERE user_id = ? AND store_id = ?", (user_id, store_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/my-stores', methods=['GET'])
+def my_stores():
+    """Get semua toko yang bisa diakses user saat ini."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    stores = get_accessible_stores(user['id'])
+    return jsonify(stores)
+
+
+@app.route('/api/switch-store/<int:store_id>', methods=['POST'])
+def switch_store(store_id):
+    """Switch ke toko lain."""
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': 'Unauthorized'}), 401
+    
+    if not can_access_store(user['id'], store_id):
+        return jsonify({'error': 'Akses ditolak'}), 403
+    
+    session['current_store_id'] = store_id
+    return jsonify({'ok': True})
 
 
 # ─────────────────────────────────────
@@ -690,20 +1385,21 @@ def get_produk():
     cari     = request.args.get('cari', '')
     barcode  = request.args.get('barcode', '')
     limit    = int(request.args.get('limit', 500))
+    store_id = get_current_store_id()
     conn = get_db()
     
     # Jika ada barcode, cari exact match
     if barcode:
         row = db_execute(conn, 
-            "SELECT * FROM produk WHERE barcode=? AND aktif=1", (barcode,)
+            "SELECT * FROM produk WHERE barcode=? AND store_id=? AND aktif=1", (barcode, store_id)
         ).fetchone()
         conn.close()
         if row:
             return jsonify(dict(row))
         return jsonify({'error': 'Produk tidak ditemukan'}), 404
     
-    sql = "SELECT * FROM produk WHERE aktif=1"
-    params = []
+    sql = "SELECT * FROM produk WHERE store_id=? AND aktif=1"
+    params = [store_id]
     if kategori and kategori != 'Semua':
         sql += " AND kategori=?"
         params.append(kategori)
@@ -723,11 +1419,12 @@ def get_produk():
 @pemilik_required
 def tambah_produk():
     d = request.json
+    store_id = get_current_store_id()
     conn = get_db()
     cur = db_execute(conn, 
-        "INSERT INTO produk (nama, harga, stok, emoji, kategori, harga_modal, stok_min, diskon, barcode) VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO produk (nama, harga, stok, emoji, kategori, harga_modal, stok_min, diskon, barcode, store_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
         (d['nama'], d['harga'], d['stok'], d.get('emoji','📦'), d['kategori'],
-         d.get('harga_modal',0), d.get('stok_min',0), d.get('diskon',0), d.get('barcode',''))
+         d.get('harga_modal',0), d.get('stok_min',0), d.get('diskon',0), d.get('barcode',''), store_id)
     )
     produk_id = cur.lastrowid
     conn.commit()
@@ -739,13 +1436,20 @@ def tambah_produk():
 @pemilik_required
 def update_produk(pid):
     d = request.json
+    store_id = get_current_store_id()
     conn = get_db()
+    # Cek apakah produk milik toko ini
+    existing = db_execute(conn, "SELECT 1 FROM produk WHERE id=? AND store_id=?", (pid, store_id)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({'error': 'Produk tidak ditemukan atau bukan milik toko ini'}), 404
+    
     db_execute(conn, 
         """UPDATE produk SET nama=?, harga=?, stok=?, emoji=?, kategori=?,
            harga_modal=?, stok_min=?, diskon=?, barcode=?,
-           diubah=datetime('now','localtime') WHERE id=?""",
+           diubah=datetime('now','localtime') WHERE id=? AND store_id=?""",
         (d['nama'], d['harga'], d['stok'], d.get('emoji','📦'), d['kategori'],
-         d.get('harga_modal',0), d.get('stok_min',0), d.get('diskon',0), d.get('barcode',''), pid)
+         d.get('harga_modal',0), d.get('stok_min',0), d.get('diskon',0), d.get('barcode',''), pid, store_id)
     )
     conn.commit()
     row = db_execute(conn, "SELECT * FROM produk WHERE id=?", (pid,)).fetchone()
@@ -755,9 +1459,10 @@ def update_produk(pid):
 @app.route('/api/produk/<int:pid>', methods=['DELETE'])
 @pemilik_required
 def hapus_produk(pid):
+    store_id = get_current_store_id()
     conn = get_db()
-    # Soft delete — data tetap ada di DB, hanya tidak ditampilkan
-    db_execute(conn, "UPDATE produk SET aktif=0 WHERE id=?", (pid,))
+    # Soft delete — hanya untuk toko ini
+    db_execute(conn, "UPDATE produk SET aktif=0 WHERE id=? AND store_id=?", (pid, store_id))
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
@@ -765,9 +1470,10 @@ def hapus_produk(pid):
 @app.route('/api/produk/scan/<barcode>', methods=['GET'])
 def scan_produk(barcode):
     """Scan barcode untuk mencari produk (untuk kasir)"""
+    store_id = get_current_store_id()
     conn = get_db()
     row = db_execute(conn, 
-        "SELECT * FROM produk WHERE barcode=? AND aktif=1", (barcode,)
+        "SELECT * FROM produk WHERE barcode=? AND store_id=? AND aktif=1", (barcode, store_id)
     ).fetchone()
     conn.close()
     if row:
