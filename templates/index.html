@@ -799,7 +799,7 @@ html.light body{color-scheme:light;}
         <div class="fg" style="margin-bottom:10px;">
           <label style="font-size:12px;color:var(--muted);margin-bottom:6px;display:block;">Nama Pelanggan <span style="color:var(--red)">*</span></label>
           <div style="display:flex;gap:8px;">
-            <input type="text" id="piutangNama" placeholder="Nama pelanggan..." style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px;" readonly>
+            <input type="text" id="piutangNama" placeholder="Ketik atau pilih pelanggan..." style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px;" oninput="onPiutangNamaInput(this.value)">
             <button type="button" class="mbtn pri" onclick="openPelangganForPiutang()" style="padding:10px 16px;font-size:13px;">Pilih</button>
           </div>
         </div>
@@ -2379,6 +2379,15 @@ const _METODE_SHORT = {tunai:'Tunai',    transfer:'Transfer',    qris:'QRIS',   
 function metodeLabel(m, short=false) { return (short ? _METODE_SHORT : _METODE_LABEL)[m||'tunai'] || 'Tunai'; }
 
 function setBayarMetode(m) {
+  // Reset piutang fields jika beralih dari piutang ke metode lain
+  if (bayarMetode === 'piutang' && m !== 'piutang') {
+    document.getElementById('piutangNama').value = '';
+    document.getElementById('piutangBayar').value = '';
+    document.getElementById('selectedPlgId').value = '';
+    piutangPelangganId = null;
+    document.getElementById('piutangPelangganDropdown')?.remove();
+  }
+  
   bayarMetode = m;
   ['tunai','transfer','qris','piutang'].forEach(k => {
     const id = 'mb' + k.charAt(0).toUpperCase() + k.slice(1);
@@ -2414,18 +2423,77 @@ function hitungSisaPiutang() {
 }
 
 let piutangPelangganId = null;
+let _piutangPelangganList = []; // Cache untuk autocomplete
+
 function openPelangganForPiutang() {
   // Buka modal pelanggan dengan mode 'pilih_piutang'
   openPelanggan('pilih_piutang');
 }
 
-function selectPelangganForPiutang(id, nama) {
+// Search dan autocomplete untuk nama pelanggan di form piutang
+async function onPiutangNamaInput(value) {
+  if (!value || value.length < 2) {
+    document.getElementById('piutangPelangganDropdown')?.remove();
+    return;
+  }
+  
+  // Cari pelanggan via API
+  try {
+    const data = await api(`/api/pelanggan?cari=${encodeURIComponent(value)}`);
+    _piutangPelangganList = data;
+    renderPiutangPelangganDropdown(data, value);
+  } catch(e) {
+    // Silent error - user bisa tetap lanjut dengan nama baru
+  }
+}
+
+function renderPiutangPelangganDropdown(data, searchValue) {
+  // Hapus dropdown lama
+  document.getElementById('piutangPelangganDropdown')?.remove();
+  
+  if (!data.length) return;
+  
+  const dropdown = document.createElement('div');
+  dropdown.id = 'piutangPelangganDropdown';
+  dropdown.style.cssText = `
+    position: absolute; top: 100%; left: 0; right: 80px; 
+    background: var(--surface); border: 1px solid var(--border); 
+    border-radius: 8px; margin-top: 4px; max-height: 200px; overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000;
+  `;
+  
+  dropdown.innerHTML = data.map(p => `
+    <div onclick="selectPiutangPelanggan(${p.id}, '${p.nama.replace(/'/g, "\\'")}')" 
+         style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border2); display: flex; align-items: center; gap: 10px;">
+      <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">${p.nama[0].toUpperCase()}</div>
+      <div style="flex: 1;">
+        <div style="font-weight: 600; font-size: 14px;">${p.nama}</div>
+        ${p.telepon ? `<div style="font-size: 12px; color: var(--muted);">${p.telepon}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  
+  // Insert setelah input container
+  const container = document.getElementById('piutangNama').parentElement;
+  container.style.position = 'relative';
+  container.appendChild(dropdown);
+}
+
+function selectPiutangPelanggan(id, nama) {
   piutangPelangganId = id;
   document.getElementById('piutangNama').value = nama;
   document.getElementById('selectedPlgId').value = id;
-  document.getElementById('plgTerpilihLabel').textContent = nama;
-  closeM('mPelanggan');
+  document.getElementById('piutangPelangganDropdown')?.remove();
 }
+
+// Tutup dropdown saat klik di luar
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('piutangPelangganDropdown');
+  const input = document.getElementById('piutangNama');
+  if (dropdown && !dropdown.contains(e.target) && e.target !== input) {
+    dropdown.remove();
+  }
+});
 
 // ══════════════════════════════════
 //  TRANSAKSI → kirim ke Flask/SQLite
@@ -2437,11 +2505,11 @@ async function prosesTrx() {
   
   const isPiutang = bayarMetode === 'piutang';
   
-  // Validasi piutang
+  // Validasi piutang - perlu nama pelanggan
   if (isPiutang) {
-    const plgId = parseInt(document.getElementById('selectedPlgId').value) || null;
-    if (!plgId) {
-      showToast('❌ Piutang wajib memilih pelanggan!');
+    const namaPiutang = document.getElementById('piutangNama').value.trim();
+    if (!namaPiutang) {
+      showToast('❌ Piutang wajib mengisi nama pelanggan!');
       return;
     }
   }
@@ -2460,7 +2528,33 @@ async function prosesTrx() {
 
   showLoading(true);
   try {
-    const plgId = parseInt(document.getElementById('selectedPlgId').value) || null;
+    let plgId = parseInt(document.getElementById('selectedPlgId').value) || null;
+    
+    // Piutang: auto-create pelanggan jika belum ada (nama diketik manual)
+    if (isPiutang && !plgId) {
+      const namaPiutang = document.getElementById('piutangNama').value.trim();
+      // Cek apakah pelanggan dengan nama ini sudah ada
+      const existing = _piutangPelangganList.find(p => p.nama.toLowerCase() === namaPiutang.toLowerCase());
+      if (existing) {
+        plgId = existing.id;
+      } else {
+        // Buat pelanggan baru
+        try {
+          const newPlg = await api('/api/pelanggan', 'POST', { 
+            nama: namaPiutang, 
+            telepon: '', 
+            alamat: '', 
+            catatan: 'Auto-created dari piutang' 
+          });
+          plgId = newPlg.id;
+        } catch(e) {
+          showToast('❌ Gagal membuat pelanggan: ' + e.message);
+          showLoading(false);
+          return;
+        }
+      }
+    }
+    
     const trx = await api('/api/transaksi','POST', {
       items: cart, subtotal:sub, diskon:dis, diskon_val:dv, diskon_tipe:dt,
       total:tot, bayar, pelanggan_id: plgId, metode_bayar: bayarMetode
@@ -2472,7 +2566,10 @@ async function prosesTrx() {
     cart=[]; 
     document.getElementById('iBayar').value=''; 
     document.getElementById('piutangBayar').value='';
+    document.getElementById('piutangNama').value='';
+    document.getElementById('selectedPlgId').value='';
     document.getElementById('dVal').value='';
+    piutangPelangganId = null;
     clearPelanggan();
     setBayarMetode('tunai'); // reset metode bayar ke tunai
     renderCart(); updateSummary();
@@ -5503,12 +5600,16 @@ async function _updateTkBadge() {
 // ══════════════════════════════════
 //  PELANGGAN
 // ══════════════════════════════════
-let plgMode = 'kelola'; // 'kelola' | 'pilih'
+let plgMode = 'kelola'; // 'kelola' | 'pilih' | 'pilih_piutang'
 
 function openPelanggan(mode = 'kelola') {
   plgMode = mode;
-  document.getElementById('plgModalTitle').textContent =
-    mode === 'pilih' ? '👤 Pilih Pelanggan' : '👥 Pelanggan';
+  const titles = {
+    'pilih': '👤 Pilih Pelanggan',
+    'pilih_piutang': '👤 Pilih Pelanggan (Piutang)',
+    'kelola': '👥 Pelanggan'
+  };
+  document.getElementById('plgModalTitle').textContent = titles[mode] || '👥 Pelanggan';
   plgGoList();
   openM('mPelanggan');
 }
@@ -5518,8 +5619,12 @@ function plgGoList() {
   document.getElementById('plgVForm').style.display   = 'none';
   document.getElementById('plgVDetail').style.display = 'none';
   document.getElementById('plgBackBtn').style.display = 'none';
-  document.getElementById('plgModalTitle').textContent =
-    plgMode === 'pilih' ? '👤 Pilih Pelanggan' : '👥 Pelanggan';
+  const titles = {
+    'pilih': '👤 Pilih Pelanggan',
+    'pilih_piutang': '👤 Pilih Pelanggan (Piutang)',
+    'kelola': '👥 Pelanggan'
+  };
+  document.getElementById('plgModalTitle').textContent = titles[plgMode] || '👥 Pelanggan';
   muatPelanggan();
 }
 
@@ -5624,7 +5729,7 @@ async function muatPelanggan() {
   el.innerHTML = data.map(p => {
     const inisial = p.nama[0].toUpperCase();
     const subinfo = [p.telepon, p.total_trx > 0 ? `${p.total_trx}x transaksi` : ''].filter(Boolean).join(' · ');
-    if (plgMode === 'pilih') {
+    if (plgMode === 'pilih' || plgMode === 'pilih_piutang') {
       return `
         <div class="plg-item clickable" onclick="pilihPelanggan(${p.id}, '${p.nama.replace(/'/g,"\\'")}')">
           <div class="plg-avatar">${inisial}</div>
@@ -5660,14 +5765,19 @@ async function simpanPelanggan() {
     catatan  : document.getElementById('plgCatatan').value.trim()
   };
   showLoading(true);
-  if (id) {
-    await api(`/api/pelanggan/${id}`, 'PUT', body);
-    showToast('✅ Data pelanggan diperbarui');
-  } else {
-    await api('/api/pelanggan', 'POST', body);
-    showToast('✅ Pelanggan ditambahkan');
+  try {
+    if (id) {
+      await api(`/api/pelanggan/${id}`, 'PUT', body);
+      showToast('✅ Data pelanggan diperbarui');
+    } else {
+      await api('/api/pelanggan', 'POST', body);
+      showToast('✅ Pelanggan ditambahkan');
+    }
+    plgGoList();
+  } catch(e) {
+    showToast('❌ ' + e.message);
   }
-  plgGoList();
+  showLoading(false);
 }
 
 async function hapusPelanggan(id) {
@@ -5679,6 +5789,19 @@ async function hapusPelanggan(id) {
 }
 
 function pilihPelanggan(id, nama) {
+  // Mode piutang - isi input di form piutang
+  if (plgMode === 'pilih_piutang') {
+    piutangPelangganId = id;
+    const piutangNama = document.getElementById('piutangNama');
+    if (piutangNama) piutangNama.value = nama;
+    const selectedPlgId = document.getElementById('selectedPlgId');
+    if (selectedPlgId) selectedPlgId.value = id;
+    closeM('mPelanggan');
+    showToast(`👤 Pelanggan dipilih: ${nama}`);
+    return;
+  }
+  
+  // Mode biasa (pilih untuk transaksi reguler)
   document.getElementById('selectedPlgId').value    = id;
   document.getElementById('plgTerpilihLabel').textContent = nama + '  ✕';
   document.getElementById('plgTerpilihLabel').onclick = (e) => {
@@ -5693,6 +5816,10 @@ function clearPelanggan() {
   document.getElementById('selectedPlgId').value    = '';
   document.getElementById('plgTerpilihLabel').textContent = '+ Pilih';
   document.getElementById('plgTerpilihLabel').onclick = null;
+  // Reset piutang fields
+  piutangPelangganId = null;
+  const piutangNama = document.getElementById('piutangNama');
+  if (piutangNama) piutangNama.value = '';
 }
 
 // ══════════════════════════════════
