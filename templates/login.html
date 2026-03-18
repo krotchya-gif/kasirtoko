@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Login — KasirToko</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#0f1117;--surface:#1a1d27;--surface2:#242736;--border:#2e3244;
   --accent:#f5a623;--green:#3dffa0;--red:#ff5c5c;--blue:#5c9aff;
   --text:#f0f0f8;--muted:#8891a8;
-  --fh:'Syne',sans-serif;--fb:'DM Sans',sans-serif;
+  --fh:'Inter',system-ui,-apple-system,sans-serif;--fb:'DM Sans',system-ui,-apple-system,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 body{
@@ -80,7 +80,16 @@ body{
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 @media(max-width:480px){
-  .card{padding:28px 20px;border-radius:16px;}
+  body{padding:16px;}
+  .card{padding:32px 24px;border-radius:20px;max-width:100%;}
+  .brand-logo{font-size:26px;}
+  .brand-sub{font-size:13px;}
+  .form-group{margin-bottom:18px;}
+  .form-group label{font-size:13px;margin-bottom:8px;}
+  .form-group input{padding:16px;font-size:16px;border-radius:12px;min-height:52px;}
+  .btn-login{padding:16px;font-size:16px;border-radius:12px;min-height:52px;}
+  .hint{font-size:13px;line-height:1.9;}
+  .hint code{font-size:12px;padding:3px 8px;}
 }
 </style>
 </head>
