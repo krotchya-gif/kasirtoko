@@ -5,7 +5,7 @@
 | Atribut | Nilai |
 |---------|-------|
 | **Nama Aplikasi** | KasirToko |
-| **Versi** | 2.0.0 |
+| **Versi** | 2.1.0 |
 | **Platform** | Web (Cross-platform) |
 | **Backend** | Python Flask |
 | **Database** | SQLite (local) / PostgreSQL (production) |
@@ -29,9 +29,9 @@
 - ✅ Keranjang belanja dengan kalkulasi otomatis
 - ✅ Diskon per item atau total transaksi (persen/nominal)
 - ✅ Multi-metode pembayaran (Tunai, Transfer, QRIS)
-- ✅ **Void/Cancel transaksi** dengan pengembalian stok
+- ✅ **Void/Cancel transaksi** dengan pengembalian stok otomatis
 - ✅ **Restore transaksi** yang sudah di-void
-- ✅ Pilih pelanggan saat transaksi
+- ✅ Pilih pelanggan saat transaksi (opsional)
 
 ### 3. Scan Barcode
 - 📷 **Scan barcode menggunakan kamera** (html5-qrcode)
@@ -45,6 +45,8 @@
 - 📱 **Print via mobile app** (RawBT, PrintHand)
 - 🔌 **Print via USB Serial** (Web Serial API - Chrome Desktop)
 - 📄 **PDF Struk** dengan jsPDF
+- 👁️ **Preview Struk** — Lihat struk sebelum cetak dengan header toko
+- 🎨 **Template Struk** — Customizable header, alamat, logo (PRO)
 - 📤 **Share Struk Digital** — Multi platform:
   - 💬 **WhatsApp** — Gambar struk atau teks
   - ✈️ **Telegram** — Share dengan format teks
@@ -52,14 +54,16 @@
   - ✉️ **Email** — Kirim detail transaksi
   - 🔗 **Native Share** — Web Share API (mobile)
   - 💾 **Download Image** — Simpan PNG struk
-- 🎨 Template struk customizable
+- 📐 **Format 58mm** — Optimized untuk printer thermal mini
 
 ### 5. Laporan & Analitik
-- 📊 Laporan harian, rentang tanggal
+- 📊 **Riwayat Transaksi** — Tab Lunas/Belum Lunas dengan summary card
+- 📅 **Filter Periode** — Harian / Mingguan / Bulanan
+- 🔍 **Search Transaksi** — Cari No. TRX atau Nama Pelanggan
 - 📈 **Grafik penjualan** (Chart.js - Harian/Mingguan/Bulanan)
 - 📉 Produk terlaris
 - ⚠️ Stok menipis (alert)
-- 📥 **Export data ke CSV**
+- 📥 **Export data ke CSV/Excel**
 - 📤 **Export laporan ke PDF** (ReportLab)
 
 ### 6. Manajemen Stok
@@ -121,7 +125,8 @@ kasirtoko/
 |----------|-----------|
 | **Backend Framework** | Flask 3.0+ |
 | **Language** | Python 3.9+ |
-| **Database** | SQLite (dev) / PostgreSQL (prod) |
+| **Database** | SQLite (dev) / PostgreSQL (prod) — Auto switching |
+| **Database Driver** | psycopg2-binary (PostgreSQL) |
 | **Template** | Jinja2 |
 | **CSS** | Custom CSS Variables (Dark/Light mode) |
 | **JavaScript** | Vanilla ES6+ |
@@ -130,6 +135,7 @@ kasirtoko/
 | **PDF Client** | jsPDF 2.5.1 |
 | **Barcode** | python-barcode 0.15.1 |
 | **QR/Barcode Scan** | html5-qrcode 2.3.8 |
+| **Font** | Inter, DM Sans (Google Fonts) |
 
 ---
 
@@ -180,13 +186,60 @@ python app.py
 | `pemilik` | `pemilik123` | Pemilik Toko |
 | `karyawan` | `karyawan123` | Karyawan |
 
+### Riwayat Transaksi
+
+**Akses:** Menu → 📋 Riwayat Transaksi
+
+**Fitur:**
+- **Tab Navigation**: "Lunas" 💰 vs "Belum Lunas" ⏳ (Piutang)
+- **Search**: Cari No. Transaksi atau Nama Pelanggan
+- **Filter Periode**: Harian 📅 / Mingguan 📆 / Bulanan 📊
+- **Summary Card**: 
+  - Lunas: Jumlah TRX, Produk Terjual, Omzet, Profit
+  - Belum Lunas: Jumlah TRX, Produk Terjual, Total Piutang, Terbayar, Sisa Piutang
+- **Export CSV**: Download data transaksi
+
+**Card Transaksi:**
+- Box tanggal kuning (tanggal besar, bulan, waktu)
+- No. TRX dan Nama Pelanggan
+- Total nominal (hijau besar)
+- Badge metode bayar (TUNAI/TRANSFER/QRIS)
+- Info kasir
+
+### Detail Transaksi
+
+Klik card transaksi untuk melihat detail:
+- **Rincian**: Dibuat Oleh, Pembayaran, Tanggal lengkap
+- **Tabel Pesanan**: Nama Barang | Jumlah (format: Rp20.000 x 2) | Harga
+- **Ringkasan**: Total Pesanan, Total, Bayar, Kembali
+- **Pelanggan**: Nama pelanggan (jika ada) dengan tombol copy
+- **Actions**:
+  - 🧾 Lihat Struk — Preview struk sebelum cetak
+  - ⋮ Menu — Cetak, Bagikan, Void (pemilik only)
+
+### Preview & Cetak Struk
+
+1. Dari Detail Transaksi, klik "🧾 Lihat Struk"
+2. Preview struk akan muncul dengan:
+   - Header Toko (nama, alamat, telepon)
+   - Info Transaksi (atas nama, no, tanggal, kasir, metode)
+   - Tabel Item lengkap
+   - Total, Bayar, Kembali
+   - Footer "Terima kasih"
+3. **Toggle Logo** (PRO): Aktifkan/nonaktifkan logo di struk
+4. Klik "🖨️ Cetak Struk (58mm)" untuk print
+
 ### Void Transaksi
 
-1. Buka menu "📋 Riwayat Transaksi"
-2. Pilih filter status (Aktif/Void/Semua)
-3. Klik tombol "🗑 Void" pada transaksi
-4. Masukkan alasan void
-5. Konfirmasi - stok akan otomatis dikembalikan
+1. Buka "📋 Riwayat Transaksi"
+2. Klik card transaksi yang akan di-void
+3. Klik tombol "⋮" → "🗑 Void Transaksi"
+4. Masukkan alasan void (wajib)
+5. Konfirmasi — **Stok akan otomatis dikembalikan**
+
+**Note:** 
+- Void hanya bisa dilakukan oleh pemilik
+- Transaksi void tetap muncul di riwayat dengan label "VOID"
 
 ### Adjust Stok Manual
 
@@ -295,14 +348,14 @@ CREATE TABLE transaksi (
     bayar INTEGER DEFAULT 0,
     kembalian INTEGER DEFAULT 0,
     kasir TEXT DEFAULT 'Kasir 1',
-    pelanggan_id INTEGER,
-    metode_bayar TEXT DEFAULT 'tunai',
+    pelanggan_id INTEGER,              -- NULL = pelanggan umum
+    metode_bayar TEXT DEFAULT 'tunai', -- tunai/transfer/qris
     tutup_kasir_id INTEGER,
     -- Void fields
-    status TEXT DEFAULT 'aktif',
-    void_reason TEXT DEFAULT '',
-    void_by TEXT DEFAULT '',
-    void_at TEXT DEFAULT ''
+    status TEXT DEFAULT 'aktif',       -- aktif/void
+    void_reason TEXT DEFAULT '',       -- alasan pembatalan
+    void_by TEXT DEFAULT '',           -- user yang void
+    void_at TEXT DEFAULT ''            -- waktu void
 );
 
 -- Stok Log (Riwayat Perubahan Stok)
@@ -413,7 +466,16 @@ python app.py --port 5001
 
 ## 📝 Changelog
 
-### v2.0.0 (Latest)
+### v2.1.0 (Latest)
+- ✅ **Redesign Riwayat Transaksi** — Tab Lunas/Belum Lunas, Summary Card, Filter Periode
+- ✅ **Card Transaksi Baru** — Box tanggal kuning, badge metode bayar, info kasir
+- ✅ **Detail Transaksi Lengkap** — Tabel pesanan, section pelanggan, action buttons
+- ✅ **Preview Struk** — Lihat struk sebelum cetak dengan header toko customizable
+- ✅ **Mobile Responsive** — Font Inter, touch targets lebih besar, layout optimized
+- ✅ **Export CSV** — Download riwayat transaksi dari frontend
+- ✅ **Dual Database** — SQLite (local) / PostgreSQL (production) otomatis switching
+
+### v2.0.0
 - ✅ **Void Transaksi** - Batalkan transaksi dengan pengembalian stok
 - ✅ **Adjust Stok Manual** - Penyesuaian stok dengan alasan
 - ✅ **Riwayat Stok Log** - Tracking semua perubahan stok
@@ -476,6 +538,9 @@ vercel --prod
 
 3. **Set Environment Variables** di Dashboard:
 - `SECRET_KEY`: Generate dengan `openssl rand -hex 32`
+- `DATABASE_URL` atau `POSTGRES_URL`: URL PostgreSQL (contoh: Neon, Supabase)
+
+**Note:** Aplikasi otomatis menggunakan PostgreSQL saat environment variable `DATABASE_URL`/`POSTGRES_URL` tersedia. Jika tidak ada, akan fallback ke SQLite.
 
 ### Deploy dengan Docker
 
