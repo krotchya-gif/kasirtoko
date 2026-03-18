@@ -323,6 +323,17 @@ def init_db():
         except Exception:
             pass
 
+    # Tambah kolom piutang ke transaksi (backward-compatible)
+    for col_sql in [
+        "ALTER TABLE transaksi ADD COLUMN is_lunas INTEGER DEFAULT 1",  # 1=lunas, 0=belum/belum lunas
+        "ALTER TABLE transaksi ADD COLUMN terbayar INTEGER DEFAULT 0",  # jumlah sudah dibayar
+        "ALTER TABLE transaksi ADD COLUMN sisa_piutang INTEGER DEFAULT 0",  # sisa yang harus dibayar
+    ]:
+        try:
+            c.execute(col_sql)
+        except Exception:
+            pass
+
     # Tabel stok_log untuk riwayat perubahan stok
     if USE_POSTGRES:
         c.execute("""
@@ -842,8 +853,20 @@ def buat_transaksi():
     kembalian    = bayar - total
     pelanggan_id = d.get('pelanggan_id') or None
     metode_bayar = d.get('metode_bayar', 'tunai')
-    if metode_bayar not in ('tunai', 'transfer', 'qris'):
-        metode_bayar = 'tunai'
+    
+    # Handle piutang/hutang
+    is_piutang = metode_bayar == 'piutang'
+    if is_piutang:
+        is_lunas = 0
+        terbayar = max(0, bayar)  # Pembayaran awal (bisa 0)
+        sisa_piutang = total - terbayar
+        kembalian = 0  # Piutang tidak ada kembalian
+    else:
+        if metode_bayar not in ('tunai', 'transfer', 'qris'):
+            metode_bayar = 'tunai'
+        is_lunas = 1
+        terbayar = total
+        sisa_piutang = 0
 
     no_trx = 'TRX' + datetime.now().strftime('%y%m%d%H%M%S')
 
@@ -852,9 +875,11 @@ def buat_transaksi():
         # Insert header transaksi
         cur = db_execute_insert(conn, 
             """INSERT INTO transaksi
-               (no_trx, subtotal, diskon, diskon_val, diskon_tipe, total, bayar, kembalian, pelanggan_id, metode_bayar)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (no_trx, subtotal, diskon, diskon_val, diskon_tipe, total, bayar, kembalian, pelanggan_id, metode_bayar)
+               (no_trx, subtotal, diskon, diskon_val, diskon_tipe, total, bayar, kembalian, 
+                pelanggan_id, metode_bayar, is_lunas, terbayar, sisa_piutang)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (no_trx, subtotal, diskon, diskon_val, diskon_tipe, total, bayar, kembalian, 
+             pelanggan_id, metode_bayar, is_lunas, terbayar, sisa_piutang)
         )
         trx_id = cur.lastrowid
 
@@ -870,6 +895,13 @@ def buat_transaksi():
             db_execute(conn, 
                 "UPDATE produk SET stok = stok - ? WHERE id=?",
                 (item['qty'], item['id'])
+            )
+
+        # Jika bukan piutang, masukkan ke kas/dompet
+        if not is_piutang and total > 0:
+            db_execute(conn,
+                "INSERT INTO kas (tipe, jumlah, keterangan, metode) VALUES (?,?,?,?)",
+                ('pemasukan', total, f'Penjualan {no_trx}', metode_bayar)
             )
 
         conn.commit()
@@ -1037,6 +1069,85 @@ def hapus_kas(kid):
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
+
+
+@app.route('/api/kas/reset', methods=['POST'])
+@pemilik_required
+def reset_saldo_kas():
+    """Reset saldo dompet ke 0 dengan konfirmasi."""
+    d = request.json or {}
+    konfirmasi = d.get('konfirmasi', '').strip()
+    
+    if konfirmasi != 'Reset Saldo':
+        return jsonify({'error': 'Konfirmasi tidak valid. Ketik "Reset Saldo" untuk melanjutkan.'}), 400
+    
+    conn = get_db()
+    # Hapus semua data kas (reset)
+    db_execute(conn, "DELETE FROM kas")
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True, 'message': 'Saldo dompet berhasil direset'})
+
+
+# ─────────────────────────────────────
+#  API: PRODUK TERJUAL (Aggregasi)
+# ─────────────────────────────────────
+@app.route('/api/laporan/produk-terjual', methods=['GET'])
+@pemilik_required
+def get_produk_terjual():
+    """Aggregasi produk terjual per periode (harian/mingguan/bulanan)."""
+    dari = request.args.get('dari', '')
+    ke   = request.args.get('ke', '')
+    
+    if not dari or not ke:
+        return jsonify({'error': 'Parameter dari dan ke wajib diisi'}), 400
+    
+    conn = get_db()
+    
+    # Query aggregasi produk terjual - hanya transaksi aktif yang lunas atau ada pembayaran
+    sql = """
+        SELECT 
+            p.id,
+            p.nama,
+            p.emoji,
+            p.kategori,
+            COALESCE(SUM(ti.qty), 0) as total_terjual,
+            COALESCE(SUM(ti.subtotal), 0) as total_omzet,
+            COUNT(DISTINCT ti.transaksi_id) as jumlah_transaksi
+        FROM produk p
+        JOIN transaksi_item ti ON ti.produk_id = p.id
+        JOIN transaksi t ON t.id = ti.transaksi_id
+        WHERE DATE(t.waktu) >= ?
+          AND DATE(t.waktu) <= ?
+          AND COALESCE(t.status, 'aktif') = 'aktif'
+          AND COALESCE(t.is_lunas, 1) = 1
+        GROUP BY p.id, p.nama, p.emoji, p.kategori
+        HAVING total_terjual > 0
+        ORDER BY total_terjual DESC
+    """
+    
+    rows = rows_to_list(db_execute(conn, sql, (dari, ke)).fetchall())
+    
+    # Hitung total keseluruhan
+    total_stat = db_execute(conn, """
+        SELECT 
+            COALESCE(SUM(ti.qty), 0) as total_qty,
+            COALESCE(SUM(ti.subtotal), 0) as total_omzet
+        FROM transaksi_item ti
+        JOIN transaksi t ON t.id = ti.transaksi_id
+        WHERE DATE(t.waktu) >= ?
+          AND DATE(t.waktu) <= ?
+          AND COALESCE(t.status, 'aktif') = 'aktif'
+          AND COALESCE(t.is_lunas, 1) = 1
+    """, (dari, ke)).fetchone()
+    
+    conn.close()
+    
+    return jsonify({
+        'rows': rows,
+        'total_qty': total_stat['total_qty'] if total_stat else 0,
+        'total_omzet': total_stat['total_omzet'] if total_stat else 0
+    })
 
 
 # ─────────────────────────────────────
@@ -1265,6 +1376,16 @@ def void_transaksi(tid):
             (reason, user['nama'], waktu_now, tid)
         )
         
+        # Jika transaksi sudah lunas (bukan piutang), keluarkan dari kas
+        if trx.get('is_lunas', 1) == 1 and trx.get('metode_bayar') != 'piutang':
+            db_execute(conn,
+                """INSERT INTO kas (tipe, jumlah, keterangan, metode) 
+                   VALUES (?,?,?,?)""",
+                ('pengeluaran', trx['total'], 
+                 f'Void transaksi {trx["no_trx"]}: {reason}',
+                 trx.get('metode_bayar', 'tunai'))
+            )
+        
         conn.commit()
         
         # Return updated transaksi
@@ -1347,6 +1468,16 @@ def restore_transaksi(tid):
                WHERE id=?""",
             (tid,)
         )
+        
+        # Jika transaksi lunas (bukan piutang), masukkan kembali ke kas
+        if trx.get('is_lunas', 1) == 1 and trx.get('metode_bayar') != 'piutang':
+            db_execute(conn,
+                """INSERT INTO kas (tipe, jumlah, keterangan, metode) 
+                   VALUES (?,?,?,?)""",
+                ('pemasukan', trx['total'], 
+                 f'Restore transaksi {trx["no_trx"]}',
+                 trx.get('metode_bayar', 'tunai'))
+            )
         
         conn.commit()
         

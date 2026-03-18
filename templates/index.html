@@ -787,10 +787,34 @@ html.light body{color-scheme:light;}
         <button class="kas-metode-btn active" id="mbTunai"    onclick="setBayarMetode('tunai')">💵 Tunai</button>
         <button class="kas-metode-btn"        id="mbTransfer" onclick="setBayarMetode('transfer')">🏦 Transfer</button>
         <button class="kas-metode-btn"        id="mbQris"     onclick="setBayarMetode('qris')">📱 QRIS</button>
+        <button class="kas-metode-btn"        id="mbPiutang"  onclick="setBayarMetode('piutang')">⏳ Piutang</button>
       </div>
+      
+      <!-- Form Piutang (muncul saat metode piutang dipilih) -->
+      <div id="piutangForm" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent);">📋 Informasi Piutang</div>
+        <div class="fg" style="margin-bottom:10px;">
+          <label style="font-size:12px;color:var(--muted);margin-bottom:6px;display:block;">Nama Pelanggan <span style="color:var(--red)">*</span></label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="piutangNama" placeholder="Nama pelanggan..." style="flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px;" readonly>
+            <button type="button" class="mbtn pri" onclick="openPelangganForPiutang()" style="padding:10px 16px;font-size:13px;">Pilih</button>
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:0;">
+          <label style="font-size:12px;color:var(--muted);margin-bottom:6px;display:block;">Pembayaran Awal <span style="font-size:11px;color:var(--muted);">(Opsional)</span></label>
+          <input type="number" id="piutangBayar" placeholder="0" min="0" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px;" oninput="hitungSisaPiutang()">
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;color:var(--muted);">Sisa Piutang:</span>
+          <span id="sisaPiutangVal" style="font-size:18px;font-weight:800;color:var(--red);">Rp 0</span>
+        </div>
+      </div>
+      
       <div class="qr" id="qBayar"></div>
-      <input class="ibayar" type="number" id="iBayar" placeholder="Nominal bayar (Rp)..." oninput="hitungKem()">
-      <div class="kr"><span>Kembalian</span><span id="kemVal" class="kp">Rp 0</span></div>
+      <div id="bayarSection">
+        <input class="ibayar" type="number" id="iBayar" placeholder="Nominal bayar (Rp)..." oninput="hitungKem()">
+        <div class="kr"><span>Kembalian</span><span id="kemVal" class="kp">Rp 0</span></div>
+      </div>
       <button class="btn-pay" id="btnPay" onclick="prosesTrx()" disabled>💳 BAYAR SEKARANG</button>
     </div>
   </div>
@@ -1100,6 +1124,46 @@ html.light body{color-scheme:light;}
           <span>⚙️</span>
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PRODUK TERJUAL -->
+<div class="overlay" id="mProdukTerjual">
+  <div class="mbox xl">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="detail-trx-back" onclick="closeM('mProdukTerjual')">
+          <span>←</span>
+        </button>
+        <div class="mtit" style="margin:0">📦 Produk Terjual</div>
+      </div>
+      <button class="riwayat-export-btn" onclick="exportProdukTerjualExcel()" style="width:auto;margin:0;padding:10px 16px;font-size:13px;">
+        <span>📥</span>
+        <span>Export Excel</span>
+      </button>
+    </div>
+    
+    <!-- Filter Info -->
+    <div id="produkTerjualFilterInfo" style="background:var(--surface2);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--muted);">
+      Periode: <span id="ptPeriodeLabel" style="color:var(--text);font-weight:600;">-</span>
+    </div>
+    
+    <!-- Total Summary -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Total Qty</div>
+        <div id="ptTotalQty" style="font-size:22px;font-weight:800;color:var(--accent);">0</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Total Omzet</div>
+        <div id="ptTotalOmzet" style="font-size:22px;font-weight:800;color:var(--green);">Rp 0</div>
+      </div>
+    </div>
+    
+    <!-- List Produk -->
+    <div id="produkTerjualList" style="max-height:50vh;overflow-y:auto;">
+      <div style="text-align:center;color:var(--muted);padding:40px;">Memuat...</div>
     </div>
   </div>
 </div>
@@ -1470,9 +1534,31 @@ html.light body{color-scheme:light;}
     </div>
 
     <!-- Riwayat -->
-    <div style="font-family:var(--fh);font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;margin-bottom:8px">📋 RIWAYAT</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-family:var(--fh);font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1px;">📋 RIWAYAT</div>
+      <button class="mbtn" style="padding:6px 12px;font-size:11px;background:rgba(255,92,92,.15);color:var(--red);border-color:rgba(255,92,92,.3);" onclick="bukaResetSaldo()">🗑 Reset Saldo</button>
+    </div>
     <div class="kas-list" id="kasList">
       <div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Belum ada data kas</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RESET SALDO -->
+<div class="overlay" id="mResetSaldo">
+  <div class="mbox" style="max-width:360px;">
+    <div class="mtit" style="color:var(--red);">⚠️ Reset Saldo Dompet</div>
+    <div class="msub">Semua data kas akan dihapus dan saldo direset ke 0. Tindakan ini tidak bisa dibatalkan.</div>
+    
+    <div style="background:rgba(255,92,92,.1);border:1px solid rgba(255,92,92,.3);border-radius:10px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:12px;color:var(--red);margin-bottom:8px;font-weight:600;">Konfirmasi</div>
+      <div style="font-size:13px;color:var(--text);margin-bottom:10px;">Ketik <strong>"Reset Saldo"</strong> di bawah untuk melanjutkan:</div>
+      <input type="text" id="resetSaldoInput" placeholder="Ketik di sini..." style="width:100%;background:var(--surface);border:1.5px solid var(--red);color:var(--text);padding:12px;border-radius:8px;font-size:14px;" oninput="validateResetSaldo()">
+    </div>
+    
+    <div class="mac">
+      <button class="mbtn sec" onclick="closeM('mResetSaldo')">Batal</button>
+      <button class="mbtn" id="btnConfirmReset" style="background:var(--red);color:#fff;opacity:.5;cursor:not-allowed;" onclick="prosesResetSaldo()" disabled>🗑 Reset Sekarang</button>
     </div>
   </div>
 </div>
@@ -2134,26 +2220,57 @@ function hitungKem() {
 //  METODE BAYAR
 // ══════════════════════════════════
 let bayarMetode = 'tunai';
-const _METODE_LABEL = {tunai:'💵 Tunai', transfer:'🏦 Transfer', qris:'📱 QRIS'};
-const _METODE_SHORT = {tunai:'Tunai',    transfer:'Transfer',    qris:'QRIS'};
+const _METODE_LABEL = {tunai:'💵 Tunai', transfer:'🏦 Transfer', qris:'📱 QRIS', piutang:'⏳ Piutang'};
+const _METODE_SHORT = {tunai:'Tunai',    transfer:'Transfer',    qris:'QRIS',    piutang:'Piutang'};
 function metodeLabel(m, short=false) { return (short ? _METODE_SHORT : _METODE_LABEL)[m||'tunai'] || 'Tunai'; }
 
 function setBayarMetode(m) {
   bayarMetode = m;
-  ['tunai','transfer','qris'].forEach(k => {
+  ['tunai','transfer','qris','piutang'].forEach(k => {
     const id = 'mb' + k.charAt(0).toUpperCase() + k.slice(1);
-    document.getElementById(id).classList.toggle('active', k === m);
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', k === m);
   });
-  // Transfer/QRIS: isi bayar otomatis = total, sembunyikan kembalian
+  
   const isTunai = m === 'tunai';
+  const isPiutang = m === 'piutang';
+  
+  // Tampilkan/sembunyikan form piutang
+  document.getElementById('piutangForm').style.display = isPiutang ? 'block' : 'none';
+  
+  // Transfer/QRIS/Piutang: sembunyikan quick bayar, input bayar, kembalian
   document.getElementById('qBayar').style.display  = isTunai ? '' : 'none';
-  document.getElementById('iBayar').style.display  = isTunai ? '' : 'none';
-  document.querySelector('.kr').style.display      = isTunai ? '' : 'none';
-  if (!isTunai) {
+  document.getElementById('bayarSection').style.display = isPiutang ? 'none' : '';
+  
+  if (isPiutang) {
+    // Piutang: update sisa piutang = total
+    hitungSisaPiutang();
+  } else if (!isTunai) {
     const tot = pRp(document.getElementById('totVal').textContent);
     document.getElementById('iBayar').value = tot;
     hitungKem();
   }
+}
+
+function hitungSisaPiutang() {
+  const total = pRp(document.getElementById('totVal').textContent);
+  const bayar = parseFloat(document.getElementById('piutangBayar').value) || 0;
+  const sisa = Math.max(0, total - bayar);
+  document.getElementById('sisaPiutangVal').textContent = fRp(sisa);
+}
+
+let piutangPelangganId = null;
+function openPelangganForPiutang() {
+  // Buka modal pelanggan dengan mode 'pilih_piutang'
+  openPelanggan('pilih_piutang');
+}
+
+function selectPelangganForPiutang(id, nama) {
+  piutangPelangganId = id;
+  document.getElementById('piutangNama').value = nama;
+  document.getElementById('selectedPlgId').value = id;
+  document.getElementById('plgTerpilihLabel').textContent = nama;
+  closeM('mPelanggan');
 }
 
 // ══════════════════════════════════
@@ -2163,8 +2280,26 @@ async function prosesTrx() {
   const sub = cart.reduce((s,i)=>s+i.harga*i.qty,0);
   const dis = getDiskon(sub);
   const tot = Math.max(0, sub-dis);
-  const bayar = parseFloat(document.getElementById('iBayar').value);
-  if (bayar < tot) { showToast('❌ Uang tidak cukup!'); return; }
+  
+  const isPiutang = bayarMetode === 'piutang';
+  
+  // Validasi piutang
+  if (isPiutang) {
+    const plgId = parseInt(document.getElementById('selectedPlgId').value) || null;
+    if (!plgId) {
+      showToast('❌ Piutang wajib memilih pelanggan!');
+      return;
+    }
+  }
+  
+  const bayar = isPiutang 
+    ? (parseFloat(document.getElementById('piutangBayar').value) || 0)
+    : parseFloat(document.getElementById('iBayar').value);
+    
+  if (!isPiutang && bayar < tot) { 
+    showToast('❌ Uang tidak cukup!'); 
+    return; 
+  }
 
   const dv = parseFloat(document.getElementById('dVal').value)||0;
   const dt = document.getElementById('dType').value;
@@ -2180,7 +2315,10 @@ async function prosesTrx() {
     renderStrukModal(trx);
     openM('mSukses');
     mobAfterTrx();
-    cart=[]; document.getElementById('iBayar').value=''; document.getElementById('dVal').value='';
+    cart=[]; 
+    document.getElementById('iBayar').value=''; 
+    document.getElementById('piutangBayar').value='';
+    document.getElementById('dVal').value='';
     clearPelanggan();
     setBayarMetode('tunai'); // reset metode bayar ke tunai
     renderCart(); updateSummary();
@@ -3608,8 +3746,124 @@ async function exportRiwayatExcel() {
   showToast('✅ Export CSV berhasil');
 }
 
-function showProdukTerjualDetail() {
-  showToast('📦 Fitur detail produk terjual akan segera hadir');
+async function showProdukTerjualDetail() {
+  const periode = document.getElementById('rPeriode').value;
+  const tanggal = document.getElementById('rTanggal').value;
+  
+  // Build date range
+  let dari, ke, periodeLabel;
+  if (periode === 'harian' && tanggal) {
+    dari = tanggal;
+    ke = tanggal;
+    periodeLabel = new Date(tanggal).toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric'});
+  } else if (periode === 'mingguan' && tanggal) {
+    const [year, week] = tanggal.split('-W');
+    const dates = getWeekDates(parseInt(year), parseInt(week));
+    dari = dates[0];
+    ke = dates[6];
+    periodeLabel = `Minggu ke-${week}, ${year}`;
+  } else if (periode === 'bulanan' && tanggal) {
+    const [year, month] = tanggal.split('-');
+    dari = `${year}-${month}-01`;
+    ke = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
+    periodeLabel = new Date(`${year}-${month}-01`).toLocaleDateString('id-ID', {month:'long', year:'numeric'});
+  } else {
+    const today = new Date().toISOString().split('T')[0];
+    dari = today;
+    ke = today;
+    periodeLabel = 'Hari Ini';
+  }
+  
+  document.getElementById('ptPeriodeLabel').textContent = periodeLabel;
+  openM('mProdukTerjual');
+  
+  showLoading(true);
+  try {
+    const data = await api(`/api/laporan/produk-terjual?dari=${dari}&ke=${ke}`);
+    
+    document.getElementById('ptTotalQty').textContent = data.total_qty || 0;
+    document.getElementById('ptTotalOmzet').textContent = fRp(data.total_omzet || 0);
+    
+    const listEl = document.getElementById('produkTerjualList');
+    if (!data.rows || data.rows.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center;color:var(--muted);padding:40px;">Tidak ada data produk terjual</div>';
+    } else {
+      listEl.innerHTML = data.rows.map(p => `
+        <div style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:10px;">
+          <div style="font-size:36px;">${p.emoji || '📦'}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:15px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.nama}</div>
+            <div style="font-size:12px;color:var(--muted);">
+              <span style="background:var(--surface);padding:3px 8px;border-radius:6px;margin-right:6px;">${p.kategori || 'Umum'}</span>
+              SKU: ${p.id}
+            </div>
+            <div style="display:flex;gap:16px;margin-top:8px;font-size:13px;">
+              <div>
+                <span style="color:var(--muted);">Terjual:</span>
+                <span style="font-weight:700;color:var(--accent);">${p.total_terjual} pcs</span>
+              </div>
+              <div>
+                <span style="color:var(--muted);">Omzet:</span>
+                <span style="font-weight:700;color:var(--green);">${fRp(p.total_omzet)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    showToast('❌ Gagal memuat produk terjual: ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function exportProdukTerjualExcel() {
+  const periode = document.getElementById('rPeriode').value;
+  const tanggal = document.getElementById('rTanggal').value;
+  
+  // Build date range sama seperti showProdukTerjualDetail
+  let dari, ke;
+  if (periode === 'harian' && tanggal) {
+    dari = tanggal;
+    ke = tanggal;
+  } else if (periode === 'mingguan' && tanggal) {
+    const [year, week] = tanggal.split('-W');
+    const dates = getWeekDates(parseInt(year), parseInt(week));
+    dari = dates[0];
+    ke = dates[6];
+  } else if (periode === 'bulanan' && tanggal) {
+    const [year, month] = tanggal.split('-');
+    dari = `${year}-${month}-01`;
+    ke = `${year}-${month}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`;
+  } else {
+    const today = new Date().toISOString().split('T')[0];
+    dari = today;
+    ke = today;
+  }
+  
+  showLoading(true);
+  try {
+    const data = await api(`/api/laporan/produk-terjual?dari=${dari}&ke=${ke}`);
+    
+    // Export CSV
+    let csv = 'ID,Nama Produk,Kategori,Terjual,Omzet\n';
+    data.rows.forEach(p => {
+      csv += `${p.id},"${p.nama}","${p.kategori || 'Umum'}",${p.total_terjual},${p.total_omzet}\n`;
+    });
+    csv += `\nTOTAL,,,${data.total_qty},${data.total_omzet}\n`;
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `produk_terjual_${dari}_${ke}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('✅ Export Excel berhasil');
+  } catch(e) {
+    showToast('❌ Gagal export: ' + e.message);
+  }
+  showLoading(false);
 }
 
 // ══════════════════════════════════
@@ -4935,6 +5189,45 @@ async function hapusKas(id) {
   await api(`/api/kas/${id}`, 'DELETE');
   await muatKas();
   showToast('🗑 Entri kas dihapus');
+}
+
+// ══════════════════════════════════
+//  RESET SALDO DOMPET
+// ══════════════════════════════════
+function bukaResetSaldo() {
+  document.getElementById('resetSaldoInput').value = '';
+  document.getElementById('btnConfirmReset').disabled = true;
+  document.getElementById('btnConfirmReset').style.opacity = '0.5';
+  document.getElementById('btnConfirmReset').style.cursor = 'not-allowed';
+  openM('mResetSaldo');
+}
+
+function validateResetSaldo() {
+  const input = document.getElementById('resetSaldoInput').value.trim();
+  const btn = document.getElementById('btnConfirmReset');
+  const isValid = input === 'Reset Saldo';
+  btn.disabled = !isValid;
+  btn.style.opacity = isValid ? '1' : '0.5';
+  btn.style.cursor = isValid ? 'pointer' : 'not-allowed';
+}
+
+async function prosesResetSaldo() {
+  const input = document.getElementById('resetSaldoInput').value.trim();
+  if (input !== 'Reset Saldo') {
+    showToast('❌ Konfirmasi tidak valid');
+    return;
+  }
+  
+  showLoading(true);
+  try {
+    await api('/api/kas/reset', 'POST', { konfirmasi: input });
+    closeM('mResetSaldo');
+    await muatKas();
+    showToast('✅ Saldo dompet berhasil direset');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
 }
 
 // ══════════════════════════════════
