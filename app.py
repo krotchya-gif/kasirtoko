@@ -860,6 +860,16 @@ def get_current_user():
     return row_to_dict(user) if user else None
 
 
+def login_required(f):
+    """Decorator untuk endpoint yang memerlukan login."""
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not get_current_user():
+            return jsonify({'error': 'Unauthorized - Silakan login terlebih dahulu'}), 401
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def get_current_store_id():
     """Ambil store_id aktif dari session. Default 1 untuk backward compatibility."""
     return session.get('current_store_id', 1)
