@@ -722,6 +722,7 @@ html.light body{color-scheme:light;}
     <button class="tb" onclick="openDompet()">💰 Dompet</button>
     {% endif %}
     <button class="tb" onclick="openPelanggan('kelola')">👥 Pelanggan</button>
+    <button class="tb" onclick="openPiutang()">⏳ Piutang</button>
     <button class="tb" onclick="openTutupKasir()" id="btnTutupKasir" style="position:relative">🔒 Tutup Kasir<span class="tk-badge hidden" id="tkBadge">!</span></button>
     <div class="tb-pg-wrap">
       <button class="tb" onclick="togglePgMenu(event)">⚙️ Pengaturan ▾</button>
@@ -2017,6 +2018,124 @@ html.light body{color-scheme:light;}
 
     <div class="mac" style="margin-top:10px">
       <button class="mbtn sec" onclick="closeM('mTutupKasir')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PIUTANG -->
+<div class="overlay" id="mPiutang">
+  <div class="mbox wide">
+    <div class="mtit">⏳ Manajemen Piutang</div>
+    <div class="msub">Daftar piutang belum lunas dan history pembayaran</div>
+    
+    <!-- Reminder Card -->
+    <div id="piutangReminder" style="background:var(--red);color:#fff;padding:12px 16px;border-radius:10px;margin-bottom:16px;display:none">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:24px">⚠️</span>
+        <div>
+          <div style="font-weight:700">Piutang Jatuh Tempo</div>
+          <div style="font-size:13px;opacity:.9" id="piutangReminderText">0 piutang >30 hari</div>
+        </div>
+        <button class="mbtn" style="margin-left:auto;background:#fff;color:var(--red)" onclick="filterPiutangJatuhTempo()">Lihat</button>
+      </div>
+    </div>
+    
+    <!-- Search -->
+    <div style="display:flex;gap:10px;margin-bottom:16px">
+      <input type="text" id="piutangCari" class="inp" placeholder="Cari nama pelanggan / no. transaksi..." style="flex:1" oninput="muatPiutang()">
+      <button class="mbtn sec" onclick="piutangCariPelanggan()">🔍 Cari</button>
+      <button class="mbtn" onclick="muatPiutang()">🔄 Refresh</button>
+    </div>
+    
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+      <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
+        <div style="font-size:12px;color:var(--muted)">Total Piutang</div>
+        <div style="font-size:20px;font-weight:800;color:var(--text)" id="piutangTotalCount">0</div>
+      </div>
+      <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
+        <div style="font-size:12px;color:var(--muted)">Total Nominal</div>
+        <div style="font-size:20px;font-weight:800;color:var(--red)" id="piutangTotalNominal">Rp 0</div>
+      </div>
+      <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
+        <div style="font-size:12px;color:var(--muted)">Jatuh Tempo</div>
+        <div style="font-size:20px;font-weight:800;color:var(--orange)" id="piutangJatuhTempo">0</div>
+      </div>
+    </div>
+    
+    <!-- List Piutang -->
+    <div id="piutangList" style="max-height:400px;overflow-y:auto;scrollbar-width:thin">
+      <div style="text-align:center;color:var(--muted);padding:40px">Memuat piutang...</div>
+    </div>
+    
+    <div class="mac" style="margin-top:16px">
+      <button class="mbtn sec" onclick="closeM('mPiutang')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL BAYAR PIUTANG -->
+<div class="overlay" id="mBayarPiutang">
+  <div class="mbox">
+    <div class="mtit">💰 Bayar Piutang</div>
+    <div class="msub" id="bpSubtitle">No. Transaksi: -</div>
+    
+    <input type="hidden" id="bpTrxId">
+    
+    <!-- Info Piutang -->
+    <div style="background:var(--surface2);padding:14px;border-radius:10px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span style="color:var(--muted)">Total Piutang:</span>
+        <span style="font-weight:700" id="bpTotal">Rp 0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <span style="color:var(--muted)">Sudah Dibayar:</span>
+        <span style="font-weight:700;color:var(--green)" id="bpTerbayar">Rp 0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:8px;margin-top:8px">
+        <span style="color:var(--muted)">Sisa:</span>
+        <span style="font-weight:800;color:var(--red);font-size:18px" id="bpSisa">Rp 0</span>
+      </div>
+    </div>
+    
+    <!-- Form Bayar -->
+    <div class="fg">
+      <label>Nominal Bayar</label>
+      <input type="number" id="bpNominal" class="inp" placeholder="0" min="1" oninput="validasiBayarPiutang()">
+    </div>
+    
+    <div class="fg">
+      <label>Metode Pembayaran</label>
+      <select id="bpMetode" class="inp">
+        <option value="tunai">💵 Tunai</option>
+        <option value="transfer">🏦 Transfer</option>
+        <option value="qris">📱 QRIS</option>
+      </select>
+    </div>
+    
+    <div class="fg">
+      <label>Catatan (opsional)</label>
+      <input type="text" id="bpCatatan" class="inp" placeholder="Keterangan pembayaran...">
+    </div>
+    
+    <!-- Quick Amount -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <button type="button" class="mbtn sec" style="flex:1;font-size:12px" onclick="setBpNominal('sisa')">Sisa Penuh</button>
+      <button type="button" class="mbtn sec" style="flex:1;font-size:12px" onclick="setBpNominal('50000')">50rb</button>
+      <button type="button" class="mbtn sec" style="flex:1;font-size:12px" onclick="setBpNominal('100000')">100rb</button>
+    </div>
+    
+    <!-- History -->
+    <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">History Pembayaran:</div>
+      <div id="bpHistory" style="max-height:120px;overflow-y:auto;font-size:13px">
+        <div style="text-align:center;color:var(--muted);padding:8px">Belum ada pembayaran</div>
+      </div>
+    </div>
+    
+    <div class="mac" style="margin-top:16px">
+      <button class="mbtn sec" onclick="closeM('mBayarPiutang')">Batal</button>
+      <button class="mbtn pri" id="btnBayarPiutang" onclick="prosesBayarPiutang()" disabled>💰 Bayar</button>
     </div>
   </div>
 </div>
@@ -5475,6 +5594,234 @@ async function prosesResetSaldo() {
     closeM('mResetSaldo');
     await muatKas();
     showToast('✅ Saldo dompet berhasil direset');
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+// ══════════════════════════════════
+//  PIUTANG (PELUNASAN CICILAN)
+// ══════════════════════════════════
+async function openPiutang() {
+  openM('mPiutang');
+  await muatPiutang();
+  await muatReminderPiutang();
+}
+
+async function muatPiutang() {
+  const cari = document.getElementById('piutangCari')?.value || '';
+  showLoading(true);
+  try {
+    const data = await api(`/api/piutang?cari=${encodeURIComponent(cari)}`);
+    renderPiutangList(data);
+    updatePiutangStats(data);
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+function renderPiutangList(data) {
+  const el = document.getElementById('piutangList');
+  if (!data.length) {
+    el.innerHTML = `<div style="text-align:center;color:var(--muted);padding:40px">
+      <div style="font-size:48px;margin-bottom:12px">✅</div>
+      <div>Tidak ada piutang belum lunas</div>
+    </div>`;
+    return;
+  }
+  
+  el.innerHTML = data.map(p => {
+    const tgl = new Date(p.waktu).toLocaleDateString('id-ID', {day:'numeric',month:'short',year:'2-digit'});
+    const hariLewat = Math.floor((new Date() - new Date(p.waktu)) / (1000*60*60*24));
+    const warningClass = hariLewat > 30 ? 'style="color:var(--red)"' : '';
+    const warningBadge = hariLewat > 30 ? `<span style="background:var(--red);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;margin-left:8px">${hariLewat} hari</span>` : '';
+    
+    return `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="font-weight:700;font-size:15px">${p.no_trx} ${warningBadge}</div>
+          <div style="font-size:12px;color:var(--muted)">${tgl} • ${p.pelanggan_nama || 'Tanpa Nama'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:18px;font-weight:800;color:var(--red)">${fRp(p.sisa_real || p.sisa_piutang)}</div>
+          <div style="font-size:11px;color:var(--muted)">Sisa Piutang</div>
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:16px;margin-bottom:12px;font-size:12px">
+        <div><span style="color:var(--muted)">Total:</span> <b>${fRp(p.total)}</b></div>
+        <div><span style="color:var(--muted)">Terbayar:</span> <b style="color:var(--green)">${fRp(p.total_bayar || 0)}</b></div>
+        <div><span style="color:var(--muted)">Telpon:</span> <b>${p.pelanggan_telp || '-'}</b></div>
+      </div>
+      
+      <div style="display:flex;gap:8px">
+        <button class="mbtn pri" style="flex:1" onclick="openBayarPiutang(${p.id}, '${p.no_trx}', ${p.total}, ${p.total_bayar || 0}, ${p.sisa_real || p.sisa_piutang})">💰 Bayar</button>
+        <button class="mbtn sec" onclick="lihatHistoryPiutang(${p.id})">📝 History</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updatePiutangStats(data) {
+  const totalCount = data.length;
+  const totalNominal = data.reduce((s, p) => s + (p.sisa_real || p.sisa_piutang), 0);
+  const jatuhTempo = data.filter(p => {
+    const hari = Math.floor((new Date() - new Date(p.waktu)) / (1000*60*60*24));
+    return hari > 30;
+  }).length;
+  
+  document.getElementById('piutangTotalCount').textContent = totalCount;
+  document.getElementById('piutangTotalNominal').textContent = fRp(totalNominal);
+  document.getElementById('piutangJatuhTempo').textContent = jatuhTempo;
+}
+
+async function muatReminderPiutang() {
+  try {
+    const data = await api('/api/piutang/reminder?hari=30');
+    const el = document.getElementById('piutangReminder');
+    const txt = document.getElementById('piutangReminderText');
+    
+    if (data.total_piutang > 0) {
+      el.style.display = 'block';
+      txt.textContent = `${data.total_piutang} piutang >30 hari (total ${fRp(data.total_nominal)})`;
+    } else {
+      el.style.display = 'none';
+    }
+  } catch(e) {
+    console.error('Gagal muat reminder:', e);
+  }
+}
+
+function filterPiutangJatuhTempo() {
+  // Filter list untuk hanya tampilkan yang >30 hari
+  document.getElementById('piutangCari').value = '';
+  muatPiutangJatuhTempo();
+}
+
+async function muatPiutangJatuhTempo() {
+  showLoading(true);
+  try {
+    const data = await api('/api/piutang/reminder?hari=30');
+    renderPiutangList(data.piutang_list);
+    updatePiutangStats(data.piutang_list);
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function openBayarPiutang(trxId, noTrx, total, terbayar, sisa) {
+  document.getElementById('bpTrxId').value = trxId;
+  document.getElementById('bpSubtitle').textContent = `No. Transaksi: ${noTrx}`;
+  document.getElementById('bpTotal').textContent = fRp(total);
+  document.getElementById('bpTerbayar').textContent = fRp(terbayar);
+  document.getElementById('bpSisa').textContent = fRp(sisa);
+  document.getElementById('bpNominal').value = '';
+  document.getElementById('bpCatatan').value = '';
+  document.getElementById('btnBayarPiutang').disabled = true;
+  
+  // Muat history
+  await muatHistoryBayar(trxId);
+  
+  openM('mBayarPiutang');
+}
+
+async function muatHistoryBayar(trxId) {
+  try {
+    const data = await api(`/api/piutang/${trxId}/history`);
+    const el = document.getElementById('bpHistory');
+    
+    if (!data.history.length) {
+      el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:8px">Belum ada pembayaran</div>';
+      return;
+    }
+    
+    el.innerHTML = data.history.map(h => {
+      const tgl = new Date(h.waktu).toLocaleString('id-ID', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border2)">
+        <div>
+          <div style="font-weight:600">${fRp(h.nominal)}</div>
+          <div style="font-size:11px;color:var(--muted)">${tgl} • ${h.metode_bayar}</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">${h.dibuat_oleh}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('bpHistory').innerHTML = '<div style="text-align:center;color:var(--muted);padding:8px">Gagal memuat history</div>';
+  }
+}
+
+function setBpNominal(value) {
+  if (value === 'sisa') {
+    const sisaText = document.getElementById('bpSisa').textContent;
+    document.getElementById('bpNominal').value = parseInt(sisaText.replace(/[^0-9]/g, '')) || 0;
+  } else {
+    document.getElementById('bpNominal').value = value;
+  }
+  validasiBayarPiutang();
+}
+
+function validasiBayarPiutang() {
+  const nominal = parseInt(document.getElementById('bpNominal').value) || 0;
+  const sisaText = document.getElementById('bpSisa').textContent;
+  const sisa = parseInt(sisaText.replace(/[^0-9]/g, '')) || 0;
+  
+  const btn = document.getElementById('btnBayarPiutang');
+  btn.disabled = nominal <= 0 || nominal > sisa;
+  
+  if (nominal > sisa) {
+    btn.textContent = '⚠️ Melebihi Sisa';
+  } else if (nominal === sisa) {
+    btn.textContent = '💰 Bayar Lunas';
+  } else {
+    btn.textContent = '💰 Bayar';
+  }
+}
+
+async function prosesBayarPiutang() {
+  const trxId = document.getElementById('bpTrxId').value;
+  const nominal = parseInt(document.getElementById('bpNominal').value) || 0;
+  const metode = document.getElementById('bpMetode').value;
+  const catatan = document.getElementById('bpCatatan').value.trim();
+  
+  if (!nominal || nominal <= 0) {
+    showToast('❌ Nominal harus lebih dari 0');
+    return;
+  }
+  
+  showLoading(true);
+  try {
+    const result = await api(`/api/piutang/${trxId}/bayar`, 'POST', {
+      nominal,
+      metode_bayar: metode,
+      catatan
+    });
+    
+    if (result.is_lunas) {
+      showToast('✅ Piutang telah lunas!');
+    } else {
+      showToast(`✅ Pembayaran ${fRp(nominal)} tersimpan. Sisa: ${fRp(result.sisa_piutang)}`);
+    }
+    
+    closeM('mBayarPiutang');
+    await muatPiutang();
+    await muatReminderPiutang();
+  } catch(e) {
+    showToast('❌ ' + e.message);
+  }
+  showLoading(false);
+}
+
+async function lihatHistoryPiutang(trxId) {
+  // Buka modal bayar tapi readonly (bisa untuk lihat history)
+  showLoading(true);
+  try {
+    const data = await api(`/api/piutang/${trxId}/history`);
+    const p = data.transaksi;
+    openBayarPiutang(trxId, p.no_trx, p.total, data.total_bayar, p.sisa_piutang);
   } catch(e) {
     showToast('❌ ' + e.message);
   }
