@@ -3940,7 +3940,7 @@ async function muatRiwayat() {
     riwayatCache = list.map(r => ({
       ...r,
       is_lunas: r.is_lunas === 1 || r.is_lunas === '1' || r.is_lunas === true
-    });
+    }));
     
     renderRiwayatSummary();
     renderRiwayatList();
