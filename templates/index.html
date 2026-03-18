@@ -2657,7 +2657,7 @@ async function prosesTrx() {
     if (isPiutang && !plgId) {
       const namaPiutang = document.getElementById('piutangNama').value.trim();
       // Cek apakah pelanggan dengan nama ini sudah ada
-      const existing = _piutangPelangganList.find(p => p.nama.toLowerCase() === namaPiutang.toLowerCase());
+      const existing = Array.isArray(_piutangPelangganList) && _piutangPelangganList.find(p => p.nama.toLowerCase() === namaPiutang.toLowerCase());
       if (existing) {
         plgId = existing.id;
       } else {
