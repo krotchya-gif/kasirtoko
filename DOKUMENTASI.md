@@ -28,10 +28,11 @@
 ### 2. Transaksi Penjualan
 - ✅ Keranjang belanja dengan kalkulasi otomatis
 - ✅ Diskon per item atau total transaksi (persen/nominal)
-- ✅ Multi-metode pembayaran (Tunai, Transfer, QRIS)
+- ✅ Multi-metode pembayaran (Tunai, Transfer, QRIS, **Piutang**)
 - ✅ **Void/Cancel transaksi** dengan pengembalian stok otomatis
 - ✅ **Restore transaksi** yang sudah di-void
 - ✅ Pilih pelanggan saat transaksi (opsional)
+- ✅ **Piutang/Hutang** - Transaksi belum lunas dengan pembayaran cicilan
 
 ### 3. Scan Barcode
 - 📷 **Scan barcode menggunakan kamera** (html5-qrcode)
@@ -105,18 +106,20 @@
 ```
 kasirtoko/
 ├── app.py                 # Main Flask application
-├── kasirtoko.db          # SQLite database
-├── requirements.txt      # Python dependencies
+├── kasirtoko.db           # SQLite database
+├── requirements.txt       # Python dependencies
+├── fix_unicode.py         # Helper script for Windows encoding fix
 ├── templates/
-│   ├── index.html       # Main UI (kasir)
-│   ├── login.html       # Login page
-│   └── offline.html     # Offline fallback
+│   ├── index.html         # Main UI (kasir)
+│   └── login.html         # Login page
 ├── static/
-│   ├── manifest.json    # PWA manifest
-│   ├── sw.js           # Service Worker
-│   └── icons/          # App icons
-├── api/                # Vercel API routes (optional)
-└── deploy/             # Deployment scripts
+│   ├── manifest.json      # PWA manifest
+│   ├── sw.js              # Service Worker (tidak aktif)
+│   └── icons/             # App icons
+├── deploy/                # Deployment scripts
+├── DOKUMENTASI.md         # Dokumentasi ini
+├── DEPLOY.md              # Panduan deployment
+└── CARA-PAKAI.md          # Panduan penggunaan
 ```
 
 ### Tech Stack
@@ -349,13 +352,30 @@ CREATE TABLE transaksi (
     kembalian INTEGER DEFAULT 0,
     kasir TEXT DEFAULT 'Kasir 1',
     pelanggan_id INTEGER,              -- NULL = pelanggan umum
-    metode_bayar TEXT DEFAULT 'tunai', -- tunai/transfer/qris
+    metode_bayar TEXT DEFAULT 'tunai', -- tunai/transfer/qris/piutang
     tutup_kasir_id INTEGER,
+    store_id INTEGER DEFAULT NULL,     -- Multi tenant
     -- Void fields
     status TEXT DEFAULT 'aktif',       -- aktif/void
     void_reason TEXT DEFAULT '',       -- alasan pembatalan
     void_by TEXT DEFAULT '',           -- user yang void
-    void_at TEXT DEFAULT ''            -- waktu void
+    void_at TEXT DEFAULT '',           -- waktu void
+    -- Piutang fields
+    is_lunas INTEGER DEFAULT 1,        -- 1=lunas, 0=belum lunas
+    terbayar INTEGER DEFAULT 0,        -- jumlah sudah dibayar
+    sisa_piutang INTEGER DEFAULT 0     -- sisa yang harus dibayar
+);
+
+-- Piutang Pembayaran (History cicilan)
+CREATE TABLE piutang_bayar (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaksi_id INTEGER NOT NULL,
+    nominal INTEGER NOT NULL DEFAULT 0,
+    metode_bayar TEXT NOT NULL DEFAULT 'tunai',
+    catatan TEXT DEFAULT '',
+    dibuat_oleh TEXT DEFAULT '',
+    store_id INTEGER DEFAULT NULL,
+    waktu TEXT DEFAULT (datetime('now','localtime'))
 );
 
 -- Stok Log (Riwayat Perubahan Stok)
@@ -405,6 +425,14 @@ CREATE TABLE stok_log (
 | `/api/transaksi/<id>` | GET | Detail transaksi |
 | `/api/transaksi/<id>/void` | POST | Void transaksi |
 | `/api/transaksi/<id>/restore` | POST | Restore transaksi |
+
+### Piutang
+| Endpoint | Method | Deskripsi |
+|----------|--------|-----------|
+| `/api/piutang` | GET | List piutang belum lunas |
+| `/api/piutang/<id>/bayar` | POST | Bayar cicilan piutang |
+| `/api/piutang/<id>/history` | GET | History pembayaran piutang |
+| `/api/piutang/reminder` | GET | Piutang jatuh tempo (>30 hari) |
 
 ### Laporan
 | Endpoint | Method | Deskripsi |
@@ -569,4 +597,130 @@ curl -fsSL https://raw.githubusercontent.com/user/kasirtoko/main/deploy/deploy-v
 
 ---
 
-*Dokumen ini terakhir diperbarui: Maret 2026*
+---
+
+## 📊 Status Fitur Setelah Rollback (Update: 19 Maret 2026)
+
+### 🚨 Alasan Rollback
+Rollback ke commit `a549494` dilakukan karena fitur **Service Worker & Push Notification** menyebabkan:
+- Blank page putih di browser
+- JavaScript code muncul di halaman
+- Cache tidak ter-update
+
+### ✅ FITUR AKTIF (Sudah Diimplementasikan)
+
+| Fitur | Status | Keterangan |
+|-------|--------|------------|
+| **Transaksi Kasir** | ✅ OK | Tunai, Transfer, QRIS, Piutang |
+| **Multi Metode Bayar** | ✅ OK | Semua metode berfungsi normal |
+| **Manajemen Produk** | ✅ OK | CRUD, kategori, emoji, barcode |
+| **Scan Barcode** | ✅ OK | Kamera & input manual |
+| **Generate Barcode** | ✅ OK | EAN13/Code128 otomatis |
+| **Cetak Label Barcode** | ✅ OK | PDF sheet |
+| **Print Struk** | ✅ OK | Browser, RawBT, Serial USB |
+| **Preview Struk** | ✅ OK | Customizable header |
+| **Share Struk Digital** | ✅ OK | WA, Telegram, Email, Download |
+| **Void Transaksi** | ✅ OK | Soft delete dengan restore stok |
+| **Restore Transaksi** | ✅ OK | Un-void transaksi |
+| **Multi User (RBAC)** | ✅ OK | Pemilik & Karyawan |
+| **Tutup Kasir** | ✅ OK | Konfirmasi pemilik |
+| **Manajemen Pelanggan** | ✅ OK | Daftar, riwayat, statistik |
+| **Manajemen Kas/Dompet** | ✅ OK | Arus kas manual |
+| **Piutang (Hutang)** | ✅ OK | Transaksi belum lunas, cicilan |
+| **Riwayat Transaksi** | ✅ OK | Tab Lunas/Belum Lunas |
+| **Laporan & Grafik** | ✅ OK | Chart.js, export PDF |
+| **Stok Log** | ✅ OK | Riwayat perubahan stok |
+| **Adjust Stok Manual** | ✅ OK | Dengan alasan |
+| **Import/Export CSV** | ✅ OK | Produk & transaksi |
+| **PWA Manifest** | ✅ OK | Install to home screen |
+| **Multi Tenant** | ✅ OK | Multi toko dengan store_id |
+
+### ❌ FITUR ROLLBACK (Belum/Tidak Aktif)
+
+| Fitur | Status | Alasan Rollback |
+|-------|--------|-----------------|
+| **Service Worker** | ❌ Ter-rollback | Menyebabkan blank page |
+| **Push Notification** | ❌ Ter-rollback | Bergantung pada SW |
+| **Background Sync** | ❌ Ter-rollback | Bergantung pada SW |
+| **Offline Mode** | ❌ Ter-rollback | Bergantung pada SW |
+
+### 📝 Perubahan Database Pasca-Rollback
+
+Rollback tidak menghapus struktur database. Kolom yang ditambahkan tetap ada:
+- `metode_bayar` (tunai/transfer/qris/piutang)
+- `is_lunas` (1=lunas, 0=belum lunas)
+- `terbayar` (jumlah sudah dibayar untuk piutang)
+- `sisa_piutang` (sisa yang harus dibayar)
+- `store_id` (multi tenant)
+- `tipe_harga` (eco/normal/premium)
+
+### 🐛 BUG YANG SUDAH DI-FIX Pasca-Rollback
+
+| Bug | Fix | Commit |
+|-----|-----|--------|
+| Unicode emoji error di Windows | Ganti emoji dengan ASCII | `f30202c` |
+| `login_required` decorator missing | Tambah decorator | `f30202c` |
+| `_piutangPelangganList.find is not a function` | Add Array.isArray check | `e3ee137` |
+| Piutang status salah di riwayat | Gunakan `is_lunas` dari backend | `ab34985` |
+| Syntax error kurung kurawal | Fix typo `})` | `bd91a4f` |
+
+---
+
+## 🧪 Testing Checklist
+
+### Test Kasir Core
+- [ ] Tambah produk ke keranjang
+- [ ] Edit qty & hapus item
+- [ ] Terapkan diskon (persen & nominal)
+- [ ] Transaksi tunai - uang pas
+- [ ] Transaksi tunai - ada kembalian
+- [ ] Transaksi transfer
+- [ ] Transaksi QRIS
+- [ ] Transaksi piutang - bayar partial
+- [ ] Transaksi piutang - bayar full
+
+### Test Print & Share
+- [ ] Print struk via browser
+- [ ] Preview struk
+- [ ] Share ke WhatsApp
+- [ ] Download struk PNG
+
+### Test Produk
+- [ ] CRUD produk
+- [ ] Generate barcode otomatis
+- [ ] Scan barcode kamera
+- [ ] Cetak label barcode PDF
+- [ ] Adjust stok manual
+
+### Test Transaksi Management
+- [ ] Lihat riwayat transaksi (Lunas)
+- [ ] Lihat riwayat transaksi (Belum Lunas)
+- [ ] Detail transaksi
+- [ ] Void transaksi (pemilik)
+- [ ] Restore transaksi
+- [ ] Filter periode (hari/minggu/bulan)
+
+### Test Piutang
+- [ ] Buat transaksi piutang
+- [ ] Cek tab "Belum Lunas"
+- [ ] Bayar cicilan piutang
+- [ ] Lihat history pembayaran piutang
+- [ ] Verifikasi status jadi lunas setelah full bayar
+
+### Test Multi User
+- [ ] Login sebagai pemilik
+- [ ] Login sebagai karyawan
+- [ ] Test role access (karyawan tidak bisa void)
+- [ ] Ganti password
+
+### Test Laporan
+- [ ] Laporan harian
+- [ ] Laporan mingguan
+- [ ] Laporan bulanan
+- [ ] Grafik penjualan
+- [ ] Export CSV
+- [ ] Export PDF
+
+---
+
+*Dokumen ini terakhir diperbarui: 19 Maret 2026*
