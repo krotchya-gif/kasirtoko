@@ -454,6 +454,7 @@ html.light body{color-scheme:light;}
 .riwayat-item-badge.tunai{background:rgba(61,255,160,.15);color:var(--green);border-color:rgba(61,255,160,.3);}
 .riwayat-item-badge.transfer{background:rgba(92,154,255,.15);color:var(--blue);border-color:rgba(92,154,255,.3);}
 .riwayat-item-badge.qris{background:rgba(185,124,255,.15);color:var(--purple);border-color:rgba(185,124,255,.3);}
+.riwayat-item-badge.piutang{background:rgba(245,166,35,.15);color:var(--accent);border-color:rgba(245,166,35,.3);}
 .riwayat-item-badge.void{background:rgba(255,92,92,.15);color:var(--red);border-color:rgba(255,92,92,.3);}
 .riwayat-item-kasir{font-size:12px;color:var(--muted);}
 .riwayat-item-kasir span{color:var(--red);font-weight:600;}
@@ -3935,12 +3936,11 @@ async function muatRiwayat() {
     const status = riwayatTab === 'lunas' ? 'aktif' : 'aktif';
     const list = await api(`/api/transaksi?dari=${dari}&ke=${ke}&status=${status}&limit=200`);
     
-    // Filter berdasarkan tab (nantinya perlu field lunas/belum_lunas dari backend)
-    // Untuk sekarang, kita asumsikan semua aktif = lunas (untuk demo)
+    // Gunakan field is_lunas dari backend (1=lunas, 0=belum lunas/piutang)
     riwayatCache = list.map(r => ({
       ...r,
-      is_lunas: r.metode_bayar !== 'hutang' // Asumsi sementara
-    }));
+      is_lunas: r.is_lunas === 1 || r.is_lunas === '1' || r.is_lunas === true
+    });
     
     renderRiwayatSummary();
     renderRiwayatList();
@@ -4067,9 +4067,11 @@ function renderRiwayatList() {
     const jam = waktu.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     
     const metodeClass = r.metode_bayar === 'tunai' ? 'tunai' : 
-                        r.metode_bayar === 'transfer' ? 'transfer' : 'qris';
+                        r.metode_bayar === 'transfer' ? 'transfer' : 
+                        r.metode_bayar === 'piutang' ? 'piutang' : 'qris';
     const metodeLabel = r.metode_bayar === 'tunai' ? 'TUNAI' : 
-                        r.metode_bayar === 'transfer' ? 'TRANSFER' : 'QRIS';
+                        r.metode_bayar === 'transfer' ? 'TRANSFER' : 
+                        r.metode_bayar === 'piutang' ? 'PIUTANG' : 'QRIS';
     
     return `
       <div class="riwayat-item ${isVoid ? 'void' : ''}" onclick="lihatDetailTrx(${r.id})">
