@@ -217,6 +217,10 @@ python app.py
 2. Pilih toko dari dropdown "🏪 Toko Aktif"
 3. Halaman akan otomatis refresh dengan nama toko yang baru
 
+**Catatan Penting:**
+- Nama toko diambil dari tabel `stores` (bukan tabel `pengaturan`) saat menggunakan fitur multi-tenant
+- Saat superadmin/pemilik mengubah nama toko di Pengaturan, data akan tersimpan di kedua tabel (`pengaturan` dan `stores`)
+
 **Ghost Mode:**
 - Superadmin bisa masuk ke toko mana saja untuk membantu setup/bantu input data
 - Saat ghost mode aktif, semua fitur toko bisa diakses
@@ -703,6 +707,7 @@ Rollback tidak menghapus struktur database. Kolom yang ditambahkan tetap ada:
 | Switch toko tidak refresh | Auto reload halaman setelah switch | `ee18559` |
 | Superadmin drawer terbatas | Lengkapi menu sama dengan desktop | `32bf2d1` |
 | Edit toko tidak ada | Tambah fitur edit toko di panel | `32bf2d1` |
+| Nama toko tidak berubah saat switch | Ambil dari tabel stores berdasarkan store_id | `2552d26` |
 
 ---
 
