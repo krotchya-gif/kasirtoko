@@ -717,21 +717,28 @@ html.light body{color-scheme:light;}
     <span class="user-badge {{ 'role-owner' if user.role == 'pemilik' or user.is_superadmin else 'role-staff' }}">
       {{ '👑' if user.role == 'pemilik' or user.is_superadmin else '👤' }} {{ user.nama }}
     </span>
+    {% if not user.is_superadmin %}
     <button class="tb" onclick="openRiwayat()">📋 Riwayat</button>
+    {% endif %}
     {% if user.role == 'pemilik' %}
     <button class="tb grn" onclick="openLaporan()">📊 Laporan</button>
     <button class="tb" onclick="openDompet()">💰 Dompet</button>
     {% endif %}
+    {% if not user.is_superadmin %}
     <button class="tb" onclick="openPelanggan('kelola')">👥 Pelanggan</button>
     <button class="tb" onclick="openPiutang()">⏳ Piutang</button>
     <button class="tb" onclick="openTutupKasir()" id="btnTutupKasir" style="position:relative">🔒 Tutup Kasir<span class="tk-badge hidden" id="tkBadge">!</span></button>
+    {% endif %}
+    {% if user.is_superadmin %}
+    <button class="tb" onclick="openSuperadminPanel()" style="background:rgba(245,166,35,.2);color:var(--accent);border-color:rgba(245,166,35,.4);">👑 Superadmin</button>
+    {% endif %}
     <div class="tb-pg-wrap">
       <button class="tb" onclick="togglePgMenu(event)">⚙️ Pengaturan ▾</button>
       <div class="tb-pg-menu" id="pgMenu">
         <button onclick="closePgMenu();openTambah()">➕ Tambah Produk</button>
         <button onclick="closePgMenu();openKelola()">⚙️ Kelola Produk</button>
         <button onclick="closePgMenu();openImportExport()">📤 Import / Export</button>
-        {% if user.role == 'pemilik' %}
+        {% if user.role == 'pemilik' or user.is_superadmin %}
         <hr>
         <button onclick="closePgMenu();openBarcodeGenerator()">🏷️ Cetak Barcode</button>
         <button onclick="closePgMenu();openStokLog()">📦 Riwayat Stok</button>
@@ -883,14 +890,28 @@ html.light body{color-scheme:light;}
   </div>
   <nav class="drawer-nav">
     {% if user.is_superadmin %}
-    <!-- SUPERADMIN MENU -->
+    <!-- SUPERADMIN MENU ONLY -->
     <button onclick="closeDrawer();openSuperadminPanel()" style="background:rgba(245,166,35,.15);border-radius:8px;margin:0 10px 8px;">
       <span class="dn-icon">👑</span><span style="color:var(--accent);font-weight:700;">Superadmin Panel</span>
     </button>
-    <hr class="drawer-divider">
-    {% endif %}
     
-    {% if user.role == 'pemilik' or user.is_superadmin %}
+    <!-- Store Switcher for Superadmin -->
+    <div id="storeSwitcherContainer" style="display:none;margin:10px 18px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">🏪 Toko Aktif</div>
+      <select id="storeSwitcher" onchange="switchStore(this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:6px;font-size:13px;">
+      </select>
+    </div>
+    
+    <hr class="drawer-divider">
+    <button class="drawer-pg-toggle" onclick="toggleDrawerPg()"><span class="dn-icon">⚙️</span>Pengaturan<span class="dn-arr" id="dnArr">▸</span></button>
+    <div class="drawer-pg-sub" id="drawerPgSub">
+      <button onclick="closeDrawer();openPengaturan()"><span class="dn-icon">🏪</span>Pengaturan Toko</button>
+      <button onclick="closeDrawer();openBarcodeGenerator()"><span class="dn-icon">🏷️</span>Cetak Barcode</button>
+      <button onclick="closeDrawer();openGantiPassword()"><span class="dn-icon">🔑</span>Akun / Password</button>
+    </div>
+    {% else %}
+    <!-- NORMAL USER MENU (Pemilik/Karyawan) -->
+    {% if user.role == 'pemilik' %}
     <button onclick="closeDrawer();openLaporan()"><span class="dn-icon">📊</span>Laporan Penjualan</button>
     <button onclick="closeDrawer();openDompet()"><span class="dn-icon">💰</span>Dompet / Kas</button>
     {% endif %}
@@ -898,7 +919,7 @@ html.light body{color-scheme:light;}
     <button onclick="closeDrawer();openRiwayat()"><span class="dn-icon">📋</span>Riwayat Transaksi</button>
     <button onclick="closeDrawer();openTutupKasir()" style="position:relative"><span class="dn-icon">🔒</span>Tutup Kasir<span class="tk-badge hidden" id="tkBadgeMob">!</span></button>
     
-    <!-- Store Switcher (untuk pemilik dengan multiple toko) -->
+    <!-- Store Switcher -->
     <div id="storeSwitcherContainer" style="display:none;margin:10px 18px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
       <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">🏪 Toko Aktif</div>
       <select id="storeSwitcher" onchange="switchStore(this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:6px;font-size:13px;">
@@ -911,7 +932,7 @@ html.light body{color-scheme:light;}
       <button onclick="closeDrawer();openTambah()"><span class="dn-icon">➕</span>Tambah Produk</button>
       <button onclick="closeDrawer();openKelola()"><span class="dn-icon">⚙️</span>Kelola Produk</button>
       <button onclick="closeDrawer();openImportExport()"><span class="dn-icon">📤</span>Import / Export</button>
-      {% if user.role == 'pemilik' or user.is_superadmin %}
+      {% if user.role == 'pemilik' %}
       <button onclick="closeDrawer();openBarcodeGenerator()"><span class="dn-icon">🏷️</span>Cetak Barcode</button>
       <button onclick="closeDrawer();openStokLog()"><span class="dn-icon">📦</span>Riwayat Stok</button>
       <button onclick="closeDrawer();openPengguna()"><span class="dn-icon">👥</span>Tim</button>
@@ -919,6 +940,7 @@ html.light body{color-scheme:light;}
       {% endif %}
       <button onclick="closeDrawer();openGantiPassword()"><span class="dn-icon">🔑</span>Akun / Password</button>
     </div>
+    {% endif %}
   </nav>
   <div class="drawer-foot">
     <div class="drawer-theme">
