@@ -80,11 +80,21 @@
 - 📊 Statistik belanja pelanggan
 
 ### 8. Multi Pengguna & Keamanan
-- 👤 Manajemen pengguna (Pemilik/Karyawan)
+- 👤 Manajemen pengguna (Superadmin/Pemilik/Karyawan)
 - 🔐 Role-based access control
 - 🔑 Ganti password sendiri
 - 🔑 Reset password user (pemilik only)
 - 📝 **Tutup Kasir** dengan konfirmasi pemilik
+
+### 9. Superadmin Panel (Multi-Tenant)
+- 👑 **Dashboard Superadmin** - Akses semua toko
+- 🏪 **Daftar Toko** - Lihat semua toko yang terdaftar
+- ✏️ **Edit Toko** - Update info toko (nama, alamat, telepon, status)
+- 👻 **Ghost Mode** - Masuk ke toko sebagai "pemilik" untuk bantu setup
+- 👤 **Buat Pemilik** - Register akun pemilik baru
+- ➕ **Buat Toko** - Buat toko baru dan assign ke pemilik
+- 📋 **Audit Logs** - Riwayat aktivitas superadmin
+- 🔄 **Switch Toko** - Pindah antar toko dengan auto-refresh
 
 ### 9. Manajemen Kas (Dompet)
 - 💰 Arus kas manual (pemasukan/pengeluaran)
@@ -186,8 +196,31 @@ python app.py
 
 | Username | Password | Role |
 |----------|----------|------|
+| `superadmin` | `superadmin123` | Super Administrator |
 | `pemilik` | `pemilik123` | Pemilik Toko |
 | `karyawan` | `karyawan123` | Karyawan |
+
+### Superadmin Panel (Multi-Tenant)
+
+**Akses:** Login sebagai `superadmin` → Klik tombol **👑 Superadmin** (desktop) atau buka drawer dan klik **👑 Superadmin Panel**
+
+**Fitur Superadmin:**
+- **🏪 Daftar Toko** - Lihat semua toko yang terdaftar
+- **✏️ Edit Toko** - Klik tombol "Edit" di card toko untuk update nama, alamat, telepon, email, status
+- **👻 Masuk Toko (Ghost Mode)** - Klik "Masuk" untuk mengakses toko sebagai pemilik (untuk bantu setup)
+- **👤 Buat Pemilik** - Register akun pemilik baru
+- **➕ Buat Toko** - Buat toko baru dan assign ke pemilik
+- **📋 Audit Logs** - Riwayat aktivitas superadmin
+
+**Switch Toko:**
+1. Buka drawer (☰ menu)
+2. Pilih toko dari dropdown "🏪 Toko Aktif"
+3. Halaman akan otomatis refresh dengan nama toko yang baru
+
+**Ghost Mode:**
+- Superadmin bisa masuk ke toko mana saja untuk membantu setup/bantu input data
+- Saat ghost mode aktif, semua fitur toko bisa diakses
+- Klik "Keluar" dari ghost mode untuk kembali ke panel superadmin
 
 ### Riwayat Transaksi
 
@@ -634,6 +667,8 @@ Rollback ke commit `a549494` dilakukan karena fitur **Service Worker & Push Noti
 | **Import/Export CSV** | ✅ OK | Produk & transaksi |
 | **PWA Manifest** | ✅ OK | Install to home screen |
 | **Multi Tenant** | ✅ OK | Multi toko dengan store_id |
+| **Superadmin Panel** | ✅ OK | Manage semua toko & ghost mode |
+| **Edit Toko** | ✅ OK | Superadmin bisa edit info toko |
 
 ### ❌ FITUR ROLLBACK (Belum/Tidak Aktif)
 
@@ -663,6 +698,11 @@ Rollback tidak menghapus struktur database. Kolom yang ditambahkan tetap ada:
 | `_piutangPelangganList.find is not a function` | Add Array.isArray check | `e3ee137` |
 | Piutang status salah di riwayat | Gunakan `is_lunas` dari backend | `ab34985` |
 | Syntax error kurung kurawal | Fix typo `})` | `bd91a4f` |
+| Superadmin panel tidak muncul desktop | Tambah tombol Superadmin di toolbar | `b9bb378` |
+| Barcode library error | Cek import & error handling | `45da236` |
+| Switch toko tidak refresh | Auto reload halaman setelah switch | `ee18559` |
+| Superadmin drawer terbatas | Lengkapi menu sama dengan desktop | `32bf2d1` |
+| Edit toko tidak ada | Tambah fitur edit toko di panel | `32bf2d1` |
 
 ---
 
@@ -720,6 +760,18 @@ Rollback tidak menghapus struktur database. Kolom yang ditambahkan tetap ada:
 - [ ] Grafik penjualan
 - [ ] Export CSV
 - [ ] Export PDF
+
+### Test Superadmin
+- [ ] Login sebagai superadmin
+- [ ] Buka Superadmin Panel
+- [ ] Edit info toko (nama, alamat, telepon)
+- [ ] Buat pemilik baru
+- [ ] Buat toko baru
+- [ ] Masuk ghost mode ke toko
+- [ ] Switch toko antar cabang
+- [ ] Lihat audit logs
+- [ ] Verifikasi auto-refresh saat switch toko
+- [ ] Verifikasi nama toko berubah di header
 
 ---
 
