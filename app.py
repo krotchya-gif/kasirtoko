@@ -1441,16 +1441,40 @@ def switch_store(store_id):
 # ─────────────────────────────────────
 @app.route('/api/pengaturan', methods=['GET'])
 def get_pengaturan():
+    """Get pengaturan toko. Jika multi-tenant, ambil nama toko dari tabel stores."""
     conn = get_db()
+    
+    # Get pengaturan dasar
     rows = db_execute(conn, "SELECT kunci, nilai FROM pengaturan").fetchall()
+    result = {r['kunci']: r['nilai'] for r in rows}
+    
+    # Jika ada store_id di session, ambil info toko dari tabel stores
+    store_id = session.get('current_store_id')
+    if store_id:
+        store = db_execute(conn, 
+            "SELECT name, address, phone, email FROM stores WHERE id = ?", 
+            (store_id,)
+        ).fetchone()
+        if store:
+            # Override dengan data dari stores table
+            result['nama_toko'] = store['name']
+            if store['address']:
+                result['alamat'] = store['address']
+            if store['phone']:
+                result['telp'] = store['phone']
+            if store['email']:
+                result['email'] = store['email']
+    
     conn.close()
-    return jsonify({r['kunci']: r['nilai'] for r in rows})
+    return jsonify(result)
 
 @app.route('/api/pengaturan', methods=['POST'])
 @pemilik_required
 def save_pengaturan():
     data = request.json
     conn = get_db()
+    
+    # Simpan ke tabel pengaturan (backward compatibility)
     for k, v in data.items():
         if USE_POSTGRES:
             db_execute(conn, 
@@ -1462,6 +1486,33 @@ def save_pengaturan():
                 "INSERT INTO pengaturan (kunci, nilai) VALUES (?,?) ON CONFLICT(kunci) DO UPDATE SET nilai=excluded.nilai",
                 (k, str(v))
             )
+    
+    # Jika multi-tenant, update juga tabel stores
+    store_id = session.get('current_store_id')
+    if store_id:
+        # Cek apakah user adalah pemilik toko ini atau superadmin
+        user = get_current_user()
+        can_edit = False
+        if user.get('is_superadmin') == 1:
+            can_edit = True
+        else:
+            # Cek ownership
+            store = db_execute(conn, "SELECT owner_id FROM stores WHERE id = ?", (store_id,)).fetchone()
+            if store and store['owner_id'] == user['id']:
+                can_edit = True
+        
+        if can_edit:
+            # Update stores table
+            name = data.get('nama_toko')
+            address = data.get('alamat')
+            phone = data.get('telp')
+            
+            if name or address or phone:
+                db_execute(conn, 
+                    "UPDATE stores SET name = COALESCE(?, name), address = COALESCE(?, address), phone = COALESCE(?, phone) WHERE id = ?",
+                    (name, address, phone, store_id)
+                )
+    
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
