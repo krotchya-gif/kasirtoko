@@ -714,8 +714,8 @@ html.light body{color-scheme:light;}
     <span><span class="db-dot"></span></span>
     <div class="clock" id="clock"></div>
     <span id="tgl" style="font-size:11px;color:var(--muted)"></span>
-    <span class="user-badge {{ 'role-owner' if user.role == 'pemilik' else 'role-staff' }}">
-      {{ '👑' if user.role == 'pemilik' else '👤' }} {{ user.nama }}
+    <span class="user-badge {{ 'role-owner' if user.role == 'pemilik' or user.is_superadmin else 'role-staff' }}">
+      {{ '👑' if user.role == 'pemilik' or user.is_superadmin else '👤' }} {{ user.nama }}
     </span>
     <button class="tb" onclick="openRiwayat()">📋 Riwayat</button>
     {% if user.role == 'pemilik' %}
@@ -866,10 +866,18 @@ html.light body{color-scheme:light;}
   </div>
   <!-- User info strip -->
   <div style="padding:10px 18px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
-    <div style="width:34px;height:34px;border-radius:50%;background:{{ 'var(--accent)' if user.role == 'pemilik' else 'var(--blue)' }};color:{{ '#111' if user.role == 'pemilik' else '#fff' }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0;">{{ user.nama[0].upper() }}</div>
+    <div style="width:34px;height:34px;border-radius:50%;background:{{ 'var(--accent)' if user.role == 'pemilik' or user.is_superadmin else 'var(--blue)' }};color:{{ '#111' if user.role == 'pemilik' or user.is_superadmin else '#fff' }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0;">{{ user.nama[0].upper() }}</div>
     <div style="min-width:0;">
       <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ user.nama }}</div>
-      <div style="font-size:11px;color:var(--muted);">{{ '👑 Pemilik' if user.role == 'pemilik' else '👤 Karyawan' }}</div>
+      <div style="font-size:11px;color:var(--muted);">
+        {% if user.is_superadmin %}
+          👑 Superadmin
+        {% elif user.role == 'pemilik' %}
+          👑 Pemilik
+        {% else %}
+          👤 Karyawan
+        {% endif %}
+      </div>
     </div>
     <a href="/logout" style="margin-left:auto;background:none;border:1px solid rgba(255,92,92,.4);color:var(--red);font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;text-decoration:none;white-space:nowrap;">Keluar</a>
   </div>
