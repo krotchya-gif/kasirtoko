@@ -6730,32 +6730,27 @@ async function enterGhostMode(storeId, storeName) {
   showLoading(true);
   try {
     await api(`/api/admin/enter-store/${storeId}`, 'POST');
-    document.getElementById('saGhostModeBanner').style.display = 'block';
-    document.getElementById('saGhostStoreName').textContent = storeName;
-    showToast(`👻 Ghost mode aktif: ${storeName}`);
+    showToast(`[OK] Masuk ke toko: ${storeName}, refresh halaman...`);
     closeM('mSuperadmin');
-    // Reload data dengan store baru
-    await muatProduk();
-    await muatKategori();
+    // Refresh halaman untuk update nama toko dan semua data
+    setTimeout(() => location.reload(), 500);
   } catch(e) {
-    showToast('❌ ' + e.message);
+    showToast('[ERR] ' + e.message);
+    showLoading(false);
   }
-  showLoading(false);
 }
 
 async function exitGhostMode() {
   showLoading(true);
   try {
     await api('/api/admin/exit-store', 'POST');
-    document.getElementById('saGhostModeBanner').style.display = 'none';
-    showToast('✅ Keluar dari ghost mode');
-    // Reload data
-    await muatProduk();
-    await muatKategori();
+    showToast('[OK] Keluar dari toko, refresh halaman...');
+    // Refresh halaman untuk update nama toko dan semua data
+    setTimeout(() => location.reload(), 500);
   } catch(e) {
-    showToast('❌ ' + e.message);
+    showToast('[ERR] ' + e.message);
+    showLoading(false);
   }
-  showLoading(false);
 }
 
 function checkGhostMode() {
@@ -6787,15 +6782,13 @@ async function switchStore(storeId) {
   showLoading(true);
   try {
     await api(`/api/switch-store/${storeId}`, 'POST');
-    showToast('✅ Berhasil pindah toko');
-    // Reload semua data
-    await muatProduk();
-    await muatKategori();
-    await muatPengaturan();
+    showToast('[OK] Berhasil pindah toko, refresh halaman...');
+    // Refresh halaman untuk update nama toko dan semua data
+    setTimeout(() => location.reload(), 500);
   } catch(e) {
-    showToast('❌ ' + e.message);
+    showToast('[ERR] ' + e.message);
+    showLoading(false);
   }
-  showLoading(false);
 }
 
 // Init saat halaman load
