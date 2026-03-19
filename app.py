@@ -1283,6 +1283,47 @@ def admin_get_logs():
     return jsonify(logs)
 
 
+@app.route('/api/admin/stores/<int:store_id>', methods=['PUT'])
+@superadmin_required
+def admin_update_store(store_id):
+    """Superadmin update data toko."""
+    data = request.json
+    name = data.get('name', '').strip()
+    address = data.get('address', '').strip()
+    phone = data.get('phone', '').strip()
+    email = data.get('email', '').strip()
+    is_active = data.get('is_active', 1)
+    
+    if not name:
+        return jsonify({'error': 'Nama toko wajib diisi'}), 400
+    
+    conn = get_db()
+    try:
+        # Cek toko exists
+        store = db_execute(conn, "SELECT * FROM stores WHERE id = ?", (store_id,)).fetchone()
+        if not store:
+            conn.close()
+            return jsonify({'error': 'Toko tidak ditemukan'}), 404
+        
+        # Update toko
+        db_execute(conn, """
+            UPDATE stores 
+            SET name = ?, address = ?, phone = ?, email = ?, is_active = ?
+            WHERE id = ?
+        """, (name, address, phone, email, is_active, store_id))
+        
+        conn.commit()
+        conn.close()
+        
+        # Log action
+        log_admin_action(session['user_id'], store_id, 'update_store', 'stores', store_id, None, {'name': name})
+        
+        return jsonify({'ok': True, 'message': 'Toko berhasil diupdate'})
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
 # ═════════════════════════════════════
 #  API: USER STORES (KARYAWAN ASSIGNMENT)
 # ═════════════════════════════════════

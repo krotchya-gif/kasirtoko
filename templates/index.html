@@ -890,10 +890,18 @@ html.light body{color-scheme:light;}
   </div>
   <nav class="drawer-nav">
     {% if user.is_superadmin %}
-    <!-- SUPERADMIN MENU ONLY -->
+    <!-- SUPERADMIN MENU -->
     <button onclick="closeDrawer();openSuperadminPanel()" style="background:rgba(245,166,35,.15);border-radius:8px;margin:0 10px 8px;">
       <span class="dn-icon">👑</span><span style="color:var(--accent);font-weight:700;">Superadmin Panel</span>
     </button>
+    <hr class="drawer-divider">
+    
+    <!-- Menu yang bisa diakses superadmin untuk bantu input data -->
+    <button onclick="closeDrawer();openLaporan()"><span class="dn-icon">📊</span>Laporan Penjualan</button>
+    <button onclick="closeDrawer();openDompet()"><span class="dn-icon">💰</span>Dompet / Kas</button>
+    <button onclick="closeDrawer();openPelanggan('kelola')"><span class="dn-icon">👥</span>Pelanggan</button>
+    <button onclick="closeDrawer();openRiwayat()"><span class="dn-icon">📋</span>Riwayat Transaksi</button>
+    <button onclick="closeDrawer();openTutupKasir()" style="position:relative"><span class="dn-icon">🔒</span>Tutup Kasir<span class="tk-badge hidden" id="tkBadgeMob">!</span></button>
     
     <!-- Store Switcher for Superadmin -->
     <div id="storeSwitcherContainer" style="display:none;margin:10px 18px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
@@ -905,8 +913,13 @@ html.light body{color-scheme:light;}
     <hr class="drawer-divider">
     <button class="drawer-pg-toggle" onclick="toggleDrawerPg()"><span class="dn-icon">⚙️</span>Pengaturan<span class="dn-arr" id="dnArr">▸</span></button>
     <div class="drawer-pg-sub" id="drawerPgSub">
-      <button onclick="closeDrawer();openPengaturan()"><span class="dn-icon">🏪</span>Pengaturan Toko</button>
+      <button onclick="closeDrawer();openTambah()"><span class="dn-icon">➕</span>Tambah Produk</button>
+      <button onclick="closeDrawer();openKelola()"><span class="dn-icon">⚙️</span>Kelola Produk</button>
+      <button onclick="closeDrawer();openImportExport()"><span class="dn-icon">📤</span>Import / Export</button>
       <button onclick="closeDrawer();openBarcodeGenerator()"><span class="dn-icon">🏷️</span>Cetak Barcode</button>
+      <button onclick="closeDrawer();openStokLog()"><span class="dn-icon">📦</span>Riwayat Stok</button>
+      <button onclick="closeDrawer();openPengguna()"><span class="dn-icon">👥</span>Tim</button>
+      <button onclick="closeDrawer();openPengaturan()"><span class="dn-icon">🏪</span>Pengaturan Toko</button>
       <button onclick="closeDrawer();openGantiPassword()"><span class="dn-icon">🔑</span>Akun / Password</button>
     </div>
     {% else %}
@@ -1830,6 +1843,51 @@ html.light body{color-scheme:light;}
         </div>
         <button class="mbtn" style="background:var(--red);color:#fff;border:none;" onclick="exitGhostMode()">Keluar</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDIT TOKO (SUPERADMIN) -->
+<div class="overlay" id="mEditTokoSuperadmin">
+  <div class="mbox">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="mtit" style="margin:0">✏️ Edit Toko</div>
+      <button class="mbtn sec" style="flex:0;padding:6px 12px;font-size:12px;border-radius:8px;" onclick="closeM('mEditTokoSuperadmin')">✕</button>
+    </div>
+    
+    <input type="hidden" id="saEditStoreId">
+    
+    <div class="fg">
+      <label>Nama Toko <span style="color:var(--red)">*</span></label>
+      <input type="text" id="saEditStoreName" placeholder="Nama toko" style="width:100%;padding:12px;border-radius:10px;">
+    </div>
+    
+    <div class="fg">
+      <label>Alamat Toko</label>
+      <input type="text" id="saEditStoreAddress" placeholder="Jl. Contoh No. 123" style="width:100%;padding:12px;border-radius:10px;">
+    </div>
+    
+    <div class="fg">
+      <label>Nomor Telepon</label>
+      <input type="text" id="saEditStorePhone" placeholder="0812-xxxx-xxxx" style="width:100%;padding:12px;border-radius:10px;">
+    </div>
+    
+    <div class="fg">
+      <label>Email</label>
+      <input type="email" id="saEditStoreEmail" placeholder="toko@example.com" style="width:100%;padding:12px;border-radius:10px;">
+    </div>
+    
+    <div class="fg">
+      <label>Status</label>
+      <select id="saEditStoreStatus" style="width:100%;padding:12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
+        <option value="1">Aktif</option>
+        <option value="0">Nonaktif</option>
+      </select>
+    </div>
+    
+    <div class="mac" style="margin-top:20px;">
+      <button class="mbtn sec" onclick="closeM('mEditTokoSuperadmin')">Batal</button>
+      <button class="mbtn pri" onclick="saveEditStoreSuperadmin()">💾 Simpan Perubahan</button>
     </div>
   </div>
 </div>
@@ -6602,15 +6660,59 @@ async function loadSuperadminStores() {
             📦 ${s.product_count || 0} produk · 🛒 ${s.transaction_count || 0} transaksi
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="mbtn pri" style="flex:1;padding:8px;font-size:12px;" onclick="enterGhostMode(${s.id}, '${s.name}')">
+            <button class="mbtn pri" style="flex:1;padding:8px;font-size:12px;" onclick="enterGhostMode(${s.id}, '${s.name.replace(/'/g, "\\'")}')">
               <span>👻</span> Masuk
+            </button>
+            <button class="mbtn" style="padding:8px;font-size:12px;background:var(--blue);color:#fff;" onclick="openEditStoreSuperadmin(${s.id})">
+              ✏️ Edit
             </button>
           </div>
         </div>
       `).join('');
     }
   } catch(e) {
-    showToast('❌ Gagal memuat toko: ' + e.message);
+    showToast('[ERR] Gagal memuat toko: ' + e.message);
+  }
+  showLoading(false);
+}
+
+function openEditStoreSuperadmin(storeId) {
+  const store = superadminStores.find(s => s.id === storeId);
+  if (!store) return;
+  
+  document.getElementById('saEditStoreId').value = store.id;
+  document.getElementById('saEditStoreName').value = store.name || '';
+  document.getElementById('saEditStoreAddress').value = store.address || '';
+  document.getElementById('saEditStorePhone').value = store.phone || '';
+  document.getElementById('saEditStoreEmail').value = store.email || '';
+  document.getElementById('saEditStoreStatus').value = store.is_active ? '1' : '0';
+  
+  openM('mEditTokoSuperadmin');
+}
+
+async function saveEditStoreSuperadmin() {
+  const storeId = document.getElementById('saEditStoreId').value;
+  const data = {
+    name: document.getElementById('saEditStoreName').value.trim(),
+    address: document.getElementById('saEditStoreAddress').value.trim(),
+    phone: document.getElementById('saEditStorePhone').value.trim(),
+    email: document.getElementById('saEditStoreEmail').value.trim(),
+    is_active: parseInt(document.getElementById('saEditStoreStatus').value)
+  };
+  
+  if (!data.name) {
+    showToast('[WARN] Nama toko wajib diisi');
+    return;
+  }
+  
+  showLoading(true);
+  try {
+    await api(`/api/admin/stores/${storeId}`, 'PUT', data);
+    showToast('[OK] Toko berhasil diupdate');
+    closeM('mEditTokoSuperadmin');
+    loadSuperadminStores();
+  } catch(e) {
+    showToast('[ERR] ' + e.message);
   }
   showLoading(false);
 }
