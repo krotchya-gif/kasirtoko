@@ -576,13 +576,27 @@ def init_db():
         )
         print("[OK] Akun default dibuat: pemilik/pemilik123  dan  karyawan/karyawan123")
 
-    # Tabel pengaturan toko (key-value)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS pengaturan (
-            kunci TEXT PRIMARY KEY,
-            nilai TEXT NOT NULL
-        )
-    """)
+    # Tabel pengaturan toko (key-value) dengan store_id isolation
+    if USE_POSTGRES:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS pengaturan (
+                kunci TEXT NOT NULL,
+                nilai TEXT NOT NULL,
+                store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE,
+                PRIMARY KEY (kunci, COALESCE(store_id, 0))
+            )
+        """)
+    else:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS pengaturan (
+                kunci TEXT NOT NULL,
+                nilai TEXT NOT NULL,
+                store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE,
+                PRIMARY KEY (kunci)
+            )
+        """)
+        # Tambahkan index untuk SQLite
+        c.execute("CREATE INDEX IF NOT EXISTS idx_pengaturan_store ON pengaturan(store_id)")
     
     # Create indexes for PostgreSQL performance
     if USE_POSTGRES:
@@ -591,7 +605,7 @@ def init_db():
         c.execute("CREATE INDEX IF NOT EXISTS idx_transaksi_waktu ON transaksi(waktu)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_transaksi_item_trxid ON transaksi_item(transaksi_id)")
 
-    # Insert default pengaturan jika belum ada
+    # Insert default pengaturan jika belum ada (global settings, store_id=NULL)
     defaults = [
         ('nama_toko',  'TOKO KELONTONG MAJU JAYA'),
         ('alamat',     'Jl. Raya No. 1'),
@@ -603,9 +617,9 @@ def init_db():
     ]
     for k, v in defaults:
         if USE_POSTGRES:
-            c.execute("INSERT INTO pengaturan (kunci, nilai) VALUES (?, ?) ON CONFLICT (kunci) DO NOTHING", (k, v))
+            c.execute("INSERT INTO pengaturan (kunci, nilai, store_id) VALUES (?, ?, NULL) ON CONFLICT (kunci) DO NOTHING", (k, v))
         else:
-            c.execute("INSERT OR IGNORE INTO pengaturan (kunci, nilai) VALUES (?, ?)", (k, v))
+            c.execute("INSERT OR IGNORE INTO pengaturan (kunci, nilai, store_id) VALUES (?, ?, NULL)", (k, v))
 
     # Insert produk default jika tabel kosong
     c.execute("SELECT COUNT(*) as count FROM produk")
@@ -793,6 +807,33 @@ def migrate_multi_tenant(c, use_postgres):
             c.execute(f"UPDATE {table} SET store_id = 1 WHERE store_id IS NULL")
         except Exception:
             pass
+    
+    # 5b. Migrasi tabel pengaturan - tambah store_id jika belum ada
+    try:
+        if use_postgres:
+            c.execute("ALTER TABLE pengaturan ADD COLUMN store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE")
+            # Buat ulang primary key untuk support composite
+            c.execute("ALTER TABLE pengaturan DROP CONSTRAINT IF EXISTS pengaturan_pkey")
+            c.execute("ALTER TABLE pengaturan ADD PRIMARY KEY (kunci, COALESCE(store_id, 0))")
+        else:
+            c.execute("ALTER TABLE pengaturan ADD COLUMN store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_pengaturan_store ON pengaturan(store_id)")
+    except Exception:
+        pass  # Kolom sudah ada atau error lain
+    
+    # 6. Assign karyawan ke toko (jika belum ada di user_stores)
+    c.execute("SELECT COUNT(*) as count FROM user_stores")
+    has_user_stores = c.fetchone()['count'] > 0
+    
+    if not has_user_stores:
+        # Assign semua karyawan ke toko 1
+        c.execute("""
+            INSERT INTO user_stores (user_id, store_id, role)
+            SELECT id, 1, 'kasir' FROM users
+            WHERE role = 'karyawan'
+            ON CONFLICT (user_id, store_id) DO NOTHING
+        """)
+        print("[OK] Karyawan di-assign ke toko")
     
     print("[OK] Data existing diupdate dengan store_id = 1")
 
@@ -1016,6 +1057,10 @@ def require_store_access(f):
 @app.before_request
 def require_login():
     """Semua route wajib login, kecuali /login, /logout, /offline, /static/, /sw.js"""
+    # Skip jika ini adalah request retry DB init
+    if getattr(g, '_db_retry_init', False):
+        return None
+        
     public_paths = {'/login', '/logout', '/offline', '/sw.js'}
     if request.path in public_paths or request.path.startswith('/static/'):
         return None
@@ -1443,13 +1488,36 @@ def switch_store(store_id):
 def get_pengaturan():
     """Get pengaturan toko. Jika multi-tenant, ambil nama toko dari tabel stores."""
     conn = get_db()
+    store_id = session.get('current_store_id')
     
-    # Get pengaturan dasar
-    rows = db_execute(conn, "SELECT kunci, nilai FROM pengaturan").fetchall()
-    result = {r['kunci']: r['nilai'] for r in rows}
+    # Get pengaturan dasar - filter by store_id jika ada
+    if store_id:
+        # Ambil pengaturan global (store_id IS NULL) dan override dengan pengaturan store-specific
+        if USE_POSTGRES:
+            rows = db_execute(conn, 
+                "SELECT kunci, nilai FROM pengaturan WHERE store_id = ? OR store_id IS NULL ORDER BY store_id NULLS LAST",
+                (store_id,)
+            ).fetchall()
+        else:
+            # SQLite: gunakan UNION untuk ordering
+            rows = db_execute(conn, 
+                """SELECT kunci, nilai FROM pengaturan WHERE store_id = ?
+                   UNION ALL
+                   SELECT kunci, nilai FROM pengaturan 
+                   WHERE store_id IS NULL 
+                     AND kunci NOT IN (SELECT kunci FROM pengaturan WHERE store_id = ?)""",
+                (store_id, store_id)
+            ).fetchall()
+        # Store-specific menang (override global)
+        result = {}
+        for r in rows:
+            result[r['kunci']] = r['nilai']
+    else:
+        # Fallback: ambil semua pengaturan global
+        rows = db_execute(conn, "SELECT kunci, nilai FROM pengaturan WHERE store_id IS NULL").fetchall()
+        result = {r['kunci']: r['nilai'] for r in rows}
     
     # Jika ada store_id di session, ambil info toko dari tabel stores
-    store_id = session.get('current_store_id')
     if store_id:
         store = db_execute(conn, 
             "SELECT name, address, phone, email FROM stores WHERE id = ?", 
@@ -1473,18 +1541,30 @@ def get_pengaturan():
 def save_pengaturan():
     data = request.json
     conn = get_db()
+    store_id = session.get('current_store_id')
     
-    # Simpan ke tabel pengaturan (backward compatibility)
+    # Simpan ke tabel pengaturan dengan store_id isolation
     for k, v in data.items():
+        # Skip field yang di-handle oleh tabel stores
+        if k in ('nama_toko', 'alamat', 'telp'):
+            continue
+            
         if USE_POSTGRES:
             db_execute(conn, 
-                "INSERT INTO pengaturan (kunci, nilai) VALUES (%s, %s) ON CONFLICT(kunci) DO UPDATE SET nilai=EXCLUDED.nilai",
-                (k, str(v))
+                """INSERT INTO pengaturan (kunci, nilai, store_id) 
+                   VALUES (%s, %s, %s) 
+                   ON CONFLICT(kunci, COALESCE(store_id, 0)) DO UPDATE SET nilai=EXCLUDED.nilai""",
+                (k, str(v), store_id)
             )
         else:
+            # SQLite: delete dulu lalu insert (upsert workaround untuk partial unique index)
             db_execute(conn, 
-                "INSERT INTO pengaturan (kunci, nilai) VALUES (?,?) ON CONFLICT(kunci) DO UPDATE SET nilai=excluded.nilai",
-                (k, str(v))
+                "DELETE FROM pengaturan WHERE kunci = ? AND (store_id = ? OR (store_id IS NULL AND ? IS NULL))",
+                (k, store_id, store_id)
+            )
+            db_execute(conn, 
+                "INSERT INTO pengaturan (kunci, nilai, store_id) VALUES (?,?,?)",
+                (k, str(v), store_id)
             )
     
     # Jika multi-tenant, update juga tabel stores
@@ -1586,10 +1666,11 @@ def update_produk(pid):
         conn.close()
         return jsonify({'error': 'Produk tidak ditemukan atau bukan milik toko ini'}), 404
     
+    now_sql = "CURRENT_TIMESTAMP" if USE_POSTGRES else "datetime('now','localtime')"
     db_execute(conn, 
-        """UPDATE produk SET nama=?, harga=?, stok=?, emoji=?, kategori=?,
+        f"""UPDATE produk SET nama=?, harga=?, stok=?, emoji=?, kategori=?,
            harga_modal=?, stok_min=?, diskon=?, barcode=?,
-           diubah=datetime('now','localtime') WHERE id=? AND store_id=?""",
+           diubah={now_sql} WHERE id=? AND store_id=?""",
         (d['nama'], d['harga'], d['stok'], d.get('emoji','[BOX]'), d['kategori'],
          d.get('harga_modal',0), d.get('stok_min',0), d.get('diskon',0), d.get('barcode',''), pid, store_id)
     )
@@ -1627,17 +1708,19 @@ def scan_produk(barcode):
 def produk_stok_rendah():
     """Produk yang stoknya di bawah atau sama dengan stok_min (jika stok_min > 0)
        atau stok <= 5 jika stok_min belum diset."""
+    store_id = get_current_store_id()
     conn = get_db()
     rows = db_execute(conn, """
         SELECT * FROM produk
         WHERE aktif = 1
+          AND store_id = ?
           AND (
               (stok_min > 0 AND stok <= stok_min)
               OR
               (stok_min = 0 AND stok <= 5 AND stok > 0)
           )
         ORDER BY stok ASC, nama
-    """).fetchall()
+    """, (store_id,)).fetchall()
     conn.close()
     return jsonify(rows_to_list(rows))
 
@@ -1648,11 +1731,12 @@ def laporan_top_produk():
     dari  = request.args.get('dari', '')
     ke    = request.args.get('ke', '')
     limit = int(request.args.get('limit', 10))
+    store_id = get_current_store_id()
 
     conn       = get_db()
     # Filter: hanya transaksi aktif (exclude void)
-    sql_filter = "WHERE COALESCE(t.status, 'aktif') = 'aktif'"
-    params     = []
+    sql_filter = "WHERE COALESCE(t.status, 'aktif') = 'aktif' AND t.store_id = ?"
+    params     = [store_id]
     if dari:
         sql_filter += " AND DATE(t.waktu) >= ?"
         params.append(dari)
@@ -1716,7 +1800,22 @@ def buat_transaksi():
         terbayar = total
         sisa_piutang = 0
 
-    no_trx = 'TRX' + datetime.now().strftime('%y%m%d%H%M%S')
+    # Generate no_trx unik dengan suffix counter untuk menghindari duplikat
+    base_no_trx = 'TRX' + datetime.now().strftime('%y%m%d%H%M%S')
+    no_trx = base_no_trx
+    
+    # Cek duplikat dan tambah suffix jika perlu
+    counter = 1
+    conn_check = get_db()
+    while True:
+        existing = db_execute(conn_check, 
+            "SELECT 1 FROM transaksi WHERE no_trx = ?", (no_trx,)
+        ).fetchone()
+        if not existing:
+            break
+        no_trx = f"{base_no_trx}-{counter:03d}"
+        counter += 1
+    conn_check.close()
 
     conn = get_db()
     try:
@@ -1748,8 +1847,8 @@ def buat_transaksi():
         # Jika bukan piutang, masukkan ke kas/dompet
         if not is_piutang and total > 0:
             db_execute(conn,
-                "INSERT INTO kas (tipe, jumlah, keterangan, metode) VALUES (?,?,?,?)",
-                ('pemasukan', total, f'Penjualan {no_trx}', metode_bayar)
+                "INSERT INTO kas (tipe, jumlah, keterangan, metode, store_id) VALUES (?,?,?,?,?)",
+                ('pemasukan', total, f'Penjualan {no_trx}', metode_bayar, store_id)
             )
 
         conn.commit()
@@ -1834,9 +1933,10 @@ def get_transaksi_by_id(tid):
 def get_kas():
     dari  = request.args.get('dari', '')
     ke    = request.args.get('ke', '')
+    store_id = get_current_store_id()
     conn  = get_db()
-    sql   = "SELECT * FROM kas WHERE 1=1"
-    params = []
+    sql   = "SELECT * FROM kas WHERE store_id = ?"
+    params = [store_id]
     if dari:
         sql += " AND DATE(waktu) >= ?"
         params.append(dari)
@@ -1851,9 +1951,9 @@ def get_kas():
         SELECT
             COALESCE(SUM(CASE WHEN tipe='pemasukan'   THEN jumlah ELSE 0 END), 0) AS total_masuk,
             COALESCE(SUM(CASE WHEN tipe='pengeluaran' THEN jumlah ELSE 0 END), 0) AS total_keluar
-        FROM kas WHERE 1=1
+        FROM kas WHERE store_id = ?
     """
-    stat_params = []
+    stat_params = [store_id]
     if dari:
         sql_stat += " AND DATE(waktu) >= ?"
         stat_params.append(dari)
@@ -1876,8 +1976,8 @@ def get_kas():
                               WHEN COALESCE(metode,'tunai')!='tunai'
                                    AND tipe='pengeluaran' THEN -jumlah
                               ELSE 0 END), 0) AS saldo_nontunai
-        FROM kas
-    """).fetchone()
+        FROM kas WHERE store_id = ?
+    """, (store_id,)).fetchone()
     stat['saldo']         = saldo_row['saldo']
     stat['saldo_tunai']   = saldo_row['saldo_tunai']
     stat['saldo_nontunai']= saldo_row['saldo_nontunai']
@@ -1893,14 +1993,15 @@ def tambah_kas():
     jumlah     = int(d.get('jumlah', 0))
     keterangan = d.get('keterangan', '').strip()
     metode     = d.get('metode', 'tunai')
+    store_id   = get_current_store_id()
     if metode not in ('tunai', 'transfer', 'qris'):
         metode = 'tunai'
     if tipe not in ('pemasukan', 'pengeluaran') or jumlah <= 0:
         return jsonify({'error': 'Data tidak valid'}), 400
     conn = get_db()
     cur = db_execute(conn, 
-        "INSERT INTO kas (tipe, jumlah, keterangan, metode) VALUES (?,?,?,?)",
-        (tipe, jumlah, keterangan, metode)
+        "INSERT INTO kas (tipe, jumlah, keterangan, metode, store_id) VALUES (?,?,?,?,?)",
+        (tipe, jumlah, keterangan, metode, store_id)
     )
     kid = cur.lastrowid
     conn.commit()
@@ -1912,8 +2013,9 @@ def tambah_kas():
 @app.route('/api/kas/<int:kid>', methods=['DELETE'])
 @pemilik_required
 def hapus_kas(kid):
+    store_id = get_current_store_id()
     conn = get_db()
-    db_execute(conn, "DELETE FROM kas WHERE id=?", (kid,))
+    db_execute(conn, "DELETE FROM kas WHERE id=? AND store_id=?", (kid, store_id))
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
@@ -1929,9 +2031,10 @@ def reset_saldo_kas():
     if konfirmasi != 'Reset Saldo':
         return jsonify({'error': 'Konfirmasi tidak valid. Ketik "Reset Saldo" untuk melanjutkan.'}), 400
     
+    store_id = get_current_store_id()
     conn = get_db()
-    # Hapus semua data kas (reset)
-    db_execute(conn, "DELETE FROM kas")
+    # Hapus semua data kas di toko ini (reset)
+    db_execute(conn, "DELETE FROM kas WHERE store_id=?", (store_id,))
     conn.commit()
     conn.close()
     return jsonify({'ok': True, 'message': 'Saldo dompet berhasil direset'})
@@ -2004,6 +2107,7 @@ def get_produk_terjual():
 @app.route('/api/tutup-kasir/preview', methods=['GET'])
 def tutup_kasir_preview():
     """Hitung transaksi yang belum ditutup (tutup_kasir_id IS NULL)."""
+    store_id = get_current_store_id()
     conn = get_db()
     row = db_execute(conn, """
         SELECT
@@ -2018,7 +2122,8 @@ def tutup_kasir_preview():
         FROM transaksi
         WHERE tutup_kasir_id IS NULL
           AND COALESCE(status, 'aktif') = 'aktif'
-    """).fetchone()
+          AND store_id = ?
+    """, (store_id,)).fetchone()
     conn.close()
     return jsonify(row_to_dict(row))
 
@@ -2029,6 +2134,7 @@ def buat_tutup_kasir():
     user = get_current_user()
     d = request.json or {}
     keterangan = d.get('keterangan', '').strip()
+    store_id = get_current_store_id()
 
     conn = get_db()
     # Ambil preview dulu - hanya transaksi aktif yang belum ditutup
@@ -2045,7 +2151,8 @@ def buat_tutup_kasir():
         FROM transaksi
         WHERE tutup_kasir_id IS NULL
           AND COALESCE(status, 'aktif') = 'aktif'
-    """).fetchone()
+          AND store_id = ?
+    """, (store_id,)).fetchone()
 
     if row['jumlah_trx'] == 0:
         conn.close()
@@ -2054,17 +2161,17 @@ def buat_tutup_kasir():
     # Buat record tutup_kasir
     cur = db_execute(conn, 
         """INSERT INTO tutup_kasir
-           (total, total_tunai, total_transfer, total_qris, jumlah_trx, keterangan, dibuat_oleh)
-           VALUES (?,?,?,?,?,?,?)""",
+           (total, total_tunai, total_transfer, total_qris, jumlah_trx, keterangan, dibuat_oleh, store_id)
+           VALUES (?,?,?,?,?,?,?,?)""",
         (row['total'], row['total_tunai'], row['total_transfer'], row['total_qris'],
-         row['jumlah_trx'], keterangan, user['nama'])
+         row['jumlah_trx'], keterangan, user['nama'], store_id)
     )
     tk_id = cur.lastrowid
 
     # Tandai semua transaksi belum tutup dengan id ini (hanya yang aktif)
     db_execute(conn, 
-        "UPDATE transaksi SET tutup_kasir_id=? WHERE tutup_kasir_id IS NULL AND COALESCE(status, 'aktif') = 'aktif'",
-        (tk_id,)
+        "UPDATE transaksi SET tutup_kasir_id=? WHERE tutup_kasir_id IS NULL AND COALESCE(status, 'aktif') = 'aktif' AND store_id=?",
+        (tk_id, store_id)
     )
     conn.commit()
 
@@ -2079,12 +2186,15 @@ def buat_tutup_kasir():
 @pemilik_required
 def list_tutup_kasir():
     """Pemilik: ambil riwayat tutup kasir + jumlah pending."""
+    store_id = get_current_store_id()
     conn = get_db()
     rows = rows_to_list(db_execute(conn, 
-        "SELECT * FROM tutup_kasir ORDER BY waktu DESC LIMIT 50"
+        "SELECT * FROM tutup_kasir WHERE store_id=? ORDER BY waktu DESC LIMIT 50",
+        (store_id,)
     ).fetchall())
     pending = db_execute(conn, 
-        "SELECT COUNT(*) AS n FROM tutup_kasir WHERE status='pending'"
+        "SELECT COUNT(*) AS n FROM tutup_kasir WHERE status='pending' AND store_id=?",
+        (store_id,)
     ).fetchone()['n']
     conn.close()
     return jsonify({'rows': rows, 'pending': pending})
@@ -2095,8 +2205,9 @@ def list_tutup_kasir():
 def konfirmasi_tutup_kasir(tk_id):
     """Pemilik konfirmasi → buat entri kas pemasukan per metode."""
     user = get_current_user()
+    store_id = get_current_store_id()
     conn = get_db()
-    tk = db_execute(conn, "SELECT * FROM tutup_kasir WHERE id=?", (tk_id,)).fetchone()
+    tk = db_execute(conn, "SELECT * FROM tutup_kasir WHERE id=? AND store_id=?", (tk_id, store_id)).fetchone()
     if not tk:
         conn.close()
         return jsonify({'error': 'Data tidak ditemukan'}), 404
@@ -2116,8 +2227,8 @@ def konfirmasi_tutup_kasir(tk_id):
     for jumlah, metode, ket in metode_map:
         if jumlah > 0:
             db_execute(conn, 
-                "INSERT INTO kas (tipe, jumlah, keterangan, metode) VALUES (?,?,?,?)",
-                ('pemasukan', jumlah, ket, metode)
+                "INSERT INTO kas (tipe, jumlah, keterangan, metode, store_id) VALUES (?,?,?,?,?)",
+                ('pemasukan', jumlah, ket, metode, store_id)
             )
 
     # Update status tutup_kasir
@@ -2227,11 +2338,12 @@ def void_transaksi(tid):
         # Jika transaksi sudah lunas (bukan piutang), keluarkan dari kas
         if trx.get('is_lunas', 1) == 1 and trx.get('metode_bayar') != 'piutang':
             db_execute(conn,
-                """INSERT INTO kas (tipe, jumlah, keterangan, metode) 
-                   VALUES (?,?,?,?)""",
+                """INSERT INTO kas (tipe, jumlah, keterangan, metode, store_id) 
+                   VALUES (?,?,?,?,?)""",
                 ('pengeluaran', trx['total'], 
                  f'Void transaksi {trx["no_trx"]}: {reason}',
-                 trx.get('metode_bayar', 'tunai'))
+                 trx.get('metode_bayar', 'tunai'),
+                 store_id)
             )
         
         conn.commit()
@@ -2279,34 +2391,56 @@ def restore_transaksi(tid):
             "SELECT * FROM transaksi_item WHERE transaksi_id=?", (tid,)
         ).fetchall()
         
+        # Validasi stok terlebih dahulu
+        stok_tidak_cukup = []
+        for item in items:
+            produk_id = item['produk_id']
+            qty = item['qty']
+            
+            prod = db_execute(conn, 
+                "SELECT nama, stok FROM produk WHERE id=? AND store_id=?", (produk_id, store_id)
+            ).fetchone()
+            
+            if prod and prod['stok'] < qty:
+                stok_tidak_cukup.append({
+                    'nama': prod['nama'],
+                    'stok_tersedia': prod['stok'],
+                    'stok_dibutuhkan': qty
+                })
+        
+        # Jika ada stok yang tidak cukup, beri warning tapi tetap lanjutkan (stok jadi negatif)
+        if stok_tidak_cukup:
+            # Log warning - tetap lanjutkan tapi catat
+            print(f"[WARN] Restore transaksi {trx['no_trx']}: Stok tidak cukup untuk {len(stok_tidak_cukup)} produk")
+        
         for item in items:
             produk_id = item['produk_id']
             qty = item['qty']
             
             # Get stok saat ini
             prod = db_execute(conn, 
-                "SELECT stok FROM produk WHERE id=?", (produk_id,)
+                "SELECT nama, stok FROM produk WHERE id=? AND store_id=?", (produk_id, store_id)
             ).fetchone()
             
             if prod:
                 stok_sebelum = prod['stok']
-                stok_sesudah = max(0, stok_sebelum - qty)
+                stok_sesudah = stok_sebelum - qty  # Bisa negatif
                 
-                # Update stok produk
+                # Update stok produk (boleh negatif untuk kasus restore)
                 db_execute(conn, 
-                    "UPDATE produk SET stok = MAX(0, stok - ?) WHERE id=?",
-                    (qty, produk_id)
+                    "UPDATE produk SET stok = ? WHERE id=?",
+                    (stok_sesudah, produk_id)
                 )
                 
                 # Catat di stok_log (restore)
                 db_execute(conn, 
                     """INSERT INTO stok_log 
                        (produk_id, tipe, jumlah, stok_sebelum, stok_sesudah, 
-                        alasan, keterangan, transaksi_id, dibuat_oleh)
-                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                        alasan, keterangan, transaksi_id, dibuat_oleh, store_id)
+                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
                     (produk_id, 'keluar', qty, stok_sebelum, stok_sesudah,
                      'restore_transaksi', f'Pengurangan stok dari restore transaksi {trx["no_trx"]}', 
-                     tid, user['nama'])
+                     tid, user['nama'], store_id)
                 )
         
         # Update status transaksi menjadi aktif
@@ -2320,11 +2454,12 @@ def restore_transaksi(tid):
         # Jika transaksi lunas (bukan piutang), masukkan kembali ke kas
         if trx.get('is_lunas', 1) == 1 and trx.get('metode_bayar') != 'piutang':
             db_execute(conn,
-                """INSERT INTO kas (tipe, jumlah, keterangan, metode) 
-                   VALUES (?,?,?,?)""",
+                """INSERT INTO kas (tipe, jumlah, keterangan, metode, store_id) 
+                   VALUES (?,?,?,?,?)""",
                 ('pemasukan', trx['total'], 
                  f'Restore transaksi {trx["no_trx"]}',
-                 trx.get('metode_bayar', 'tunai'))
+                 trx.get('metode_bayar', 'tunai'),
+                 store_id)
             )
         
         conn.commit()
@@ -2414,13 +2549,15 @@ def bayar_piutang(tid):
     conn.execute("BEGIN TRANSACTION")
     
     try:
-        # Cek transaksi exists dan status piutang
-        trx = db_execute(conn, """
+        # Cek transaksi exists dan status piutang dengan row locking untuk mencegah race condition
+        lock_sql = "FOR UPDATE" if USE_POSTGRES else ""
+        trx = db_execute(conn, f"""
             SELECT * FROM transaksi 
             WHERE id=? AND metode_bayar='piutang' 
               AND COALESCE(is_lunas, 0) = 0
               AND COALESCE(status, 'aktif') = 'aktif'
               AND (store_id = ? OR ? IS NULL)
+            {lock_sql}
         """, (tid, store_id, store_id)).fetchone()
         
         if not trx:
@@ -2932,15 +3069,16 @@ def get_stok_log():
     produk_id = request.args.get('produk_id', '')
     tipe   = request.args.get('tipe', '')  # masuk, keluar, adjust
     limit  = int(request.args.get('limit', 100))
+    store_id = get_current_store_id()
     
     conn = get_db()
     sql = """
         SELECT sl.*, p.nama as produk_nama, p.emoji as produk_emoji
         FROM stok_log sl
         JOIN produk p ON p.id = sl.produk_id
-        WHERE 1=1
+        WHERE p.store_id = ?
     """
-    params = []
+    params = [store_id]
     
     if dari:
         sql += " AND DATE(sl.waktu) >= ?"
@@ -3000,8 +3138,9 @@ def adjust_stok(pid):
             return jsonify({'error': 'Tidak ada perubahan stok'}), 400
         
         # Update stok produk
+        now_sql = "CURRENT_TIMESTAMP" if USE_POSTGRES else "datetime('now','localtime')"
         db_execute(conn, 
-            "UPDATE produk SET stok = ?, diubah = datetime('now','localtime') WHERE id=?",
+            f"UPDATE produk SET stok = ?, diubah = {now_sql} WHERE id=?",
             (stok_baru, pid)
         )
         
@@ -3057,25 +3196,31 @@ def get_stok_history(pid):
 @app.route('/api/pelanggan', methods=['GET'])
 def get_pelanggan():
     cari = request.args.get('cari', '').strip()
+    store_id = get_current_store_id()
     conn = get_db()
     sql = """
         SELECT p.*,
                COUNT(t.id)                          AS total_trx,
                COALESCE(SUM(t.total), 0)            AS total_belanja
         FROM pelanggan p
-        LEFT JOIN transaksi t ON t.pelanggan_id = p.id
-        WHERE 1=1
+        LEFT JOIN transaksi t ON t.pelanggan_id = p.id AND t.store_id = ?
+        WHERE p.store_id = ?
     """
-    params = []
+    params = [store_id, store_id]
     if cari:
         if USE_POSTGRES:
             sql += " AND (p.nama ILIKE %s OR p.telepon ILIKE %s)"
             params.extend([f'%{cari}%', f'%{cari}%'])
-            sql += " GROUP BY p.id ORDER BY p.nama"
         else:
             sql += " AND (p.nama LIKE ? OR p.telepon LIKE ?)"
             params.extend([f'%{cari}%', f'%{cari}%'])
-            sql += " GROUP BY p.id ORDER BY p.nama COLLATE NOCASE"
+    
+    # GROUP BY selalu ditambahkan di luar blok if
+    if USE_POSTGRES:
+        sql += " GROUP BY p.id ORDER BY p.nama"
+    else:
+        sql += " GROUP BY p.id ORDER BY p.nama COLLATE NOCASE"
+    
     rows = db_execute(conn, sql, params).fetchall()
     conn.close()
     return jsonify(rows_to_list(rows))
@@ -3087,10 +3232,11 @@ def tambah_pelanggan():
     nama = d.get('nama', '').strip()
     if not nama:
         return jsonify({'error': 'Nama tidak boleh kosong'}), 400
+    store_id = get_current_store_id()
     conn = get_db()
     cur  = db_execute(conn, 
-        "INSERT INTO pelanggan (nama, telepon, alamat, catatan) VALUES (?,?,?,?)",
-        (nama, d.get('telepon','').strip(), d.get('alamat','').strip(), d.get('catatan','').strip())
+        "INSERT INTO pelanggan (nama, telepon, alamat, catatan, store_id) VALUES (?,?,?,?,?)",
+        (nama, d.get('telepon','').strip(), d.get('alamat','').strip(), d.get('catatan','').strip(), store_id)
     )
     pid = cur.lastrowid
     conn.commit()
@@ -3101,8 +3247,9 @@ def tambah_pelanggan():
 
 @app.route('/api/pelanggan/<int:pid>', methods=['GET'])
 def get_pelanggan_detail(pid):
+    store_id = get_current_store_id()
     conn = get_db()
-    plg  = db_execute(conn, "SELECT * FROM pelanggan WHERE id=?", (pid,)).fetchone()
+    plg  = db_execute(conn, "SELECT * FROM pelanggan WHERE id=? AND store_id=?", (pid, store_id)).fetchone()
     if not plg:
         conn.close()
         return jsonify({'error': 'Tidak ditemukan'}), 404
@@ -3110,11 +3257,11 @@ def get_pelanggan_detail(pid):
         SELECT COUNT(*) AS total_trx,
                COALESCE(SUM(total), 0) AS total_belanja,
                MAX(waktu) AS terakhir_belanja
-        FROM transaksi WHERE pelanggan_id=?
-    """, (pid,)).fetchone())
+        FROM transaksi WHERE pelanggan_id=? AND store_id=?
+    """, (pid, store_id)).fetchone())
     transaksi = rows_to_list(db_execute(conn, 
-        "SELECT * FROM transaksi WHERE pelanggan_id=? ORDER BY waktu DESC LIMIT 30",
-        (pid,)
+        "SELECT * FROM transaksi WHERE pelanggan_id=? AND store_id=? ORDER BY waktu DESC LIMIT 30",
+        (pid, store_id)
     ).fetchall())
     conn.close()
     return jsonify({'pelanggan': row_to_dict(plg), 'stats': stats, 'transaksi': transaksi})
@@ -3126,10 +3273,11 @@ def update_pelanggan(pid):
     nama = d.get('nama', '').strip()
     if not nama:
         return jsonify({'error': 'Nama tidak boleh kosong'}), 400
+    store_id = get_current_store_id()
     conn = get_db()
     db_execute(conn, 
-        "UPDATE pelanggan SET nama=?, telepon=?, alamat=?, catatan=? WHERE id=?",
-        (nama, d.get('telepon','').strip(), d.get('alamat','').strip(), d.get('catatan','').strip(), pid)
+        "UPDATE pelanggan SET nama=?, telepon=?, alamat=?, catatan=? WHERE id=? AND store_id=?",
+        (nama, d.get('telepon','').strip(), d.get('alamat','').strip(), d.get('catatan','').strip(), pid, store_id)
     )
     conn.commit()
     row = row_to_dict(db_execute(conn, "SELECT * FROM pelanggan WHERE id=?", (pid,)).fetchone())
@@ -3139,9 +3287,10 @@ def update_pelanggan(pid):
 
 @app.route('/api/pelanggan/<int:pid>', methods=['DELETE'])
 def hapus_pelanggan(pid):
+    store_id = get_current_store_id()
     conn = get_db()
-    db_execute(conn, "UPDATE transaksi SET pelanggan_id=NULL WHERE pelanggan_id=?", (pid,))
-    db_execute(conn, "DELETE FROM pelanggan WHERE id=?", (pid,))
+    db_execute(conn, "UPDATE transaksi SET pelanggan_id=NULL WHERE pelanggan_id=? AND store_id=?", (pid, store_id))
+    db_execute(conn, "DELETE FROM pelanggan WHERE id=? AND store_id=?", (pid, store_id))
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
@@ -3349,9 +3498,9 @@ def laporan_stok():
     
     conn = get_db()
     
-    # Base query dengan store_id filter
-    base_where = "WHERE (p.store_id = ? OR ? IS NULL) AND p.aktif = 1"
-    params = [store_id, store_id]
+    # Base query dengan store_id filter - FIX Bug #11: hapus OR IS NULL
+    base_where = "WHERE p.store_id = ? AND p.aktif = 1"
+    params = [store_id]
     
     if mode == 'hampir_habis':
         # Stok <= stok_min atau stok <= 5 jika stok_min = 0
@@ -3394,11 +3543,21 @@ def laporan_stok():
     
     rows = db_execute(conn, sql, tuple(params)).fetchall()
     
-    # Stats
-    total_produk = len(rows)
-    hampir_habis = sum(1 for r in rows if r['stok'] <= r['stok_min'] or (r['stok_min'] == 0 and r['stok'] <= 5))
-    stok_nol = sum(1 for r in rows if r['stok'] == 0)
-    total_nilai = sum(r['stok'] * r['harga_modal'] for r in rows)
+    # Stats - dihitung via SQL untuk performance
+    stats_sql = f"""
+        SELECT 
+            COUNT(*) as total_produk,
+            SUM(CASE WHEN p.stok <= p.stok_min OR (p.stok_min = 0 AND p.stok <= 5) THEN 1 ELSE 0 END) as hampir_habis,
+            SUM(CASE WHEN p.stok = 0 THEN 1 ELSE 0 END) as stok_nol,
+            SUM(p.stok * p.harga_modal) as total_nilai
+        FROM produk p
+        {base_where}
+    """
+    stats = db_execute(conn, stats_sql, tuple(params)).fetchone()
+    total_produk = stats['total_produk'] if stats else 0
+    hampir_habis = stats['hampir_habis'] if stats else 0
+    stok_nol = stats['stok_nol'] if stats else 0
+    total_nilai = stats['total_nilai'] if stats else 0
     
     conn.close()
     
@@ -3470,7 +3629,7 @@ def laporan_keuangan():
         FROM transaksi_item ti
         JOIN transaksi t ON t.id = ti.transaksi_id
         LEFT JOIN produk p ON p.id = ti.produk_id
-        WHERE DATE(t.waktu) >= ? AND DATE(waktu) <= ?
+        WHERE DATE(t.waktu) >= ? AND DATE(t.waktu) <= ?
           AND COALESCE(t.status, 'aktif') = 'aktif'
           AND (t.store_id = ? OR ? IS NULL)
     """, (dari, ke, store_id, store_id)).fetchone()
@@ -3576,8 +3735,6 @@ def export_pdf():
         {' AND DATE(waktu) <= ?' if ke else ''}
     """, [p for p in [dari, ke] if p]).fetchone()
     
-    conn.close()
-    
     # Create PDF
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -3655,7 +3812,11 @@ def export_pdf():
                 f"Rp {t['total']:,.0f}".replace(',', '.'),
                 t.get('metode_bayar', 'tunai').upper()
             ])
-        
+    
+    # Tutup koneksi database setelah selesai menggunakannya
+    conn.close()
+    
+    if transaksi:
         detail_table = Table(detail_data, colWidths=[0.6*cm, 2.8*cm, 2.5*cm, 2.5*cm, 1.5*cm, 2.2*cm, 1.5*cm])
         detail_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e3244')),
@@ -3752,9 +3913,11 @@ def export_csv():
 @pemilik_required
 def export_produk_csv():
     """Export semua produk aktif ke CSV — siap diedit di Excel lalu di-import kembali."""
+    store_id = get_current_store_id()
     conn = get_db()
     rows = db_execute(conn, 
-        "SELECT nama, kategori, harga, stok, emoji, harga_modal, stok_min, diskon FROM produk WHERE aktif=1 ORDER BY kategori, nama"
+        "SELECT nama, kategori, harga, stok, emoji, harga_modal, stok_min, diskon FROM produk WHERE aktif=1 AND store_id=? ORDER BY kategori, nama",
+        (store_id,)
     ).fetchall()
     conn.close()
 
@@ -3856,25 +4019,27 @@ def import_produk_csv():
         return jsonify({'error': 'Semua baris tidak valid', 'detail': errors}), 400
 
     conn = get_db()
+    store_id = get_current_store_id()
     tambah = 0
     update = 0
     skip   = 0
+    now_sql = "CURRENT_TIMESTAMP" if USE_POSTGRES else "datetime('now','localtime')"
 
     try:
         if mode == 'ganti':
-            # Nonaktifkan semua produk lama
-            db_execute(conn, "UPDATE produk SET aktif=0")
+            # Nonaktifkan semua produk lama di toko ini
+            db_execute(conn, "UPDATE produk SET aktif=0 WHERE store_id=?", (store_id,))
 
         for p in valid:
             existing = db_execute(conn, 
-                "SELECT id FROM produk WHERE LOWER(nama)=LOWER(?) AND aktif=1",
-                (p['nama'],)
+                "SELECT id FROM produk WHERE LOWER(nama)=LOWER(?) AND aktif=1 AND store_id=?",
+                (p['nama'], store_id)
             ).fetchone()
 
             if existing:
                 if mode == 'timpa':
                     db_execute(conn, 
-                        "UPDATE produk SET harga=?, stok=?, emoji=?, kategori=?, harga_modal=?, stok_min=?, diskon=?, diubah=datetime('now','localtime') WHERE id=?",
+                        f"UPDATE produk SET harga=?, stok=?, emoji=?, kategori=?, harga_modal=?, stok_min=?, diskon=?, diubah={now_sql} WHERE id=?",
                         (p['harga'], p['stok'], p['emoji'], p['kategori'],
                          p['harga_modal'], p['stok_min'], p['diskon'], existing['id'])
                     )
@@ -3882,7 +4047,7 @@ def import_produk_csv():
                 elif mode == 'ganti':
                     # Reaktifkan dan update
                     db_execute(conn, 
-                        "UPDATE produk SET harga=?, stok=?, emoji=?, kategori=?, harga_modal=?, stok_min=?, diskon=?, aktif=1, diubah=datetime('now','localtime') WHERE id=?",
+                        f"UPDATE produk SET harga=?, stok=?, emoji=?, kategori=?, harga_modal=?, stok_min=?, diskon=?, aktif=1, diubah={now_sql} WHERE id=?",
                         (p['harga'], p['stok'], p['emoji'], p['kategori'],
                          p['harga_modal'], p['stok_min'], p['diskon'], existing['id'])
                     )
@@ -3893,20 +4058,20 @@ def import_produk_csv():
             else:
                 # Cek apakah ada produk nonaktif dengan nama sama → reaktifkan
                 deleted = db_execute(conn, 
-                    "SELECT id FROM produk WHERE LOWER(nama)=LOWER(?) AND aktif=0",
-                    (p['nama'],)
+                    "SELECT id FROM produk WHERE LOWER(nama)=LOWER(?) AND aktif=0 AND store_id=?",
+                    (p['nama'], store_id)
                 ).fetchone()
                 if deleted:
                     db_execute(conn, 
-                        "UPDATE produk SET harga=?, stok=?, emoji=?, kategori=?, harga_modal=?, stok_min=?, diskon=?, aktif=1, diubah=datetime('now','localtime') WHERE id=?",
+                        f"UPDATE produk SET harga=?, stok=?, emoji=?, kategori=?, harga_modal=?, stok_min=?, diskon=?, aktif=1, diubah={now_sql} WHERE id=?",
                         (p['harga'], p['stok'], p['emoji'], p['kategori'],
                          p['harga_modal'], p['stok_min'], p['diskon'], deleted['id'])
                     )
                 else:
                     db_execute(conn, 
-                        "INSERT INTO produk (nama, harga, stok, emoji, kategori, harga_modal, stok_min, diskon) VALUES (?,?,?,?,?,?,?,?)",
+                        "INSERT INTO produk (nama, harga, stok, emoji, kategori, harga_modal, stok_min, diskon, store_id) VALUES (?,?,?,?,?,?,?,?,?)",
                         (p['nama'], p['harga'], p['stok'], p['emoji'], p['kategori'],
-                         p['harga_modal'], p['stok_min'], p['diskon'])
+                         p['harga_modal'], p['stok_min'], p['diskon'], store_id)
                     )
                 tambah += 1
 
@@ -3982,12 +4147,30 @@ def tambah_pengguna():
         return jsonify({'error': 'Role tidak valid'}), 400
     conn = get_db()
     try:
+        # Insert ke tabel pengguna (legacy)
         db_execute(conn, 
             "INSERT INTO pengguna (username, nama, password, role) VALUES (?,?,?,?)",
             (username, nama, generate_password_hash(password, method='pbkdf2:sha256'), role)
         )
+        
+        # Insert ke tabel users (modern) - untuk backward compatibility
+        cur = db_execute_insert(conn,
+            "INSERT INTO users (username, nama, password, role, is_superadmin) VALUES (?,?,?,?,?)",
+            (username, nama, generate_password_hash(password, method='pbkdf2:sha256'), role, 0)
+        )
+        user_id = cur.lastrowid
+        
+        # Assign ke toko aktif jika role karyawan
+        if role == 'karyawan':
+            store_id = get_current_store_id()
+            db_execute(conn,
+                "INSERT INTO user_stores (user_id, store_id, role) VALUES (?,?,?)",
+                (user_id, store_id, 'kasir')
+            )
+        
         conn.commit()
     except Exception as e:
+        conn.rollback()
         conn.close()
         if 'UNIQUE' in str(e).upper():
             return jsonify({'error': f'Username "{username}" sudah digunakan'}), 400
@@ -4002,7 +4185,18 @@ def hapus_pengguna_api(uid):
     if uid == session.get('user_id'):
         return jsonify({'error': 'Tidak bisa menonaktifkan akun sendiri'}), 400
     conn = get_db()
+    
+    # Nonaktifkan di tabel pengguna
     db_execute(conn, "UPDATE pengguna SET aktif=0 WHERE id=?", (uid,))
+    
+    # Sync ke tabel users (nonaktifkan)
+    try:
+        user_row = db_execute(conn, "SELECT username FROM pengguna WHERE id=?", (uid,)).fetchone()
+        if user_row:
+            db_execute(conn, "UPDATE users SET is_active=0 WHERE username=?", (user_row['username'],))
+    except Exception as e:
+        print(f"[WARN] Gagal sync ke users: {e}")
+    
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
@@ -4016,7 +4210,20 @@ def reset_password_pengguna(uid):
     if len(password) < 6:
         return jsonify({'error': 'Password minimal 6 karakter'}), 400
     conn = get_db()
-    db_execute(conn, "UPDATE pengguna SET password=? WHERE id=?", (generate_password_hash(password, method='pbkdf2:sha256'), uid))
+    
+    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
+    
+    # Update tabel pengguna
+    db_execute(conn, "UPDATE pengguna SET password=? WHERE id=?", (hashed_pw, uid))
+    
+    # Sync ke tabel users
+    try:
+        user_row = db_execute(conn, "SELECT username FROM pengguna WHERE id=?", (uid,)).fetchone()
+        if user_row:
+            db_execute(conn, "UPDATE users SET password_hash=? WHERE username=?", (hashed_pw, user_row['username']))
+    except Exception as e:
+        print(f"[WARN] Gagal sync ke users: {e}")
+    
     conn.commit()
     conn.close()
     return jsonify({'ok': True})
@@ -4060,12 +4267,15 @@ except Exception as e:
 @app.before_request
 def ensure_db():
     if '_db_init_error' in globals():
+        g._db_retry_init = True  # Flag untuk skip require_login
         try:
             init_db()
             print("[OK] Database initialized (retry)")
             del globals()['_db_init_error']
         except Exception as e:
             print(f"[ERR] Database init failed again: {e}")
+        finally:
+            g._db_retry_init = False
 
 # ─────────────────────────────────────
 #  JALANKAN SERVER (LOCAL DEV)
