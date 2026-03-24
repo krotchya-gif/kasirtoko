@@ -1056,11 +1056,17 @@ def require_store_access(f):
 
 @app.before_request
 def require_login():
-    """Semua route wajib login, kecuali /login, /logout, /offline, /static/, /sw.js"""
-    # Skip jika ini adalah request retry DB init
-    if getattr(g, '_db_retry_init', False):
-        return None
-        
+    """Semua route wajib login + ensure_db retry. Kecuali /login, /logout, /offline, /static/, /sw.js"""
+    # 1. Ensure DB init retry jika sebelumnya gagal
+    if '_db_init_error' in globals():
+        try:
+            init_db()
+            print("[OK] Database initialized (retry)")
+            del globals()['_db_init_error']
+        except Exception as e:
+            print(f"[ERR] Database init failed again: {e}")
+    
+    # 2. Login check
     public_paths = {'/login', '/logout', '/offline', '/sw.js'}
     if request.path in public_paths or request.path.startswith('/static/'):
         return None
@@ -3812,11 +3818,9 @@ def export_pdf():
                 f"Rp {t['total']:,.0f}".replace(',', '.'),
                 t.get('metode_bayar', 'tunai').upper()
             ])
-    
-    # Tutup koneksi database setelah selesai menggunakannya
-    conn.close()
-    
-    if transaksi:
+        
+        # Build detail table setelah loop selesai dan data terkumpul
+        detail_table = Table(detail_data, colWidths=[0.6*cm, 2.8*cm, 2.5*cm, 2.5*cm, 1.5*cm, 2.2*cm, 1.5*cm])
         detail_table = Table(detail_data, colWidths=[0.6*cm, 2.8*cm, 2.5*cm, 2.5*cm, 1.5*cm, 2.2*cm, 1.5*cm])
         detail_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2e3244')),
@@ -3841,6 +3845,9 @@ def export_pdf():
     elements.append(Spacer(1, 30))
     footer_text = f"Dibuat pada: {datetime.now().strftime('%d %B %Y %H:%M')} oleh {get_current_user()['nama']}"
     elements.append(Paragraph(footer_text, styles['Normal']))
+    
+    # Tutup koneksi database setelah semua data diambil
+    conn.close()
     
     doc.build(elements)
     buffer.seek(0)
@@ -4189,11 +4196,11 @@ def hapus_pengguna_api(uid):
     # Nonaktifkan di tabel pengguna
     db_execute(conn, "UPDATE pengguna SET aktif=0 WHERE id=?", (uid,))
     
-    # Sync ke tabel users (nonaktifkan)
+    # Sync ke tabel users (nonaktifkan) - kolom 'aktif' bukan 'is_active'
     try:
         user_row = db_execute(conn, "SELECT username FROM pengguna WHERE id=?", (uid,)).fetchone()
         if user_row:
-            db_execute(conn, "UPDATE users SET is_active=0 WHERE username=?", (user_row['username'],))
+            db_execute(conn, "UPDATE users SET aktif=0 WHERE username=?", (user_row['username'],))
     except Exception as e:
         print(f"[WARN] Gagal sync ke users: {e}")
     
@@ -4216,11 +4223,11 @@ def reset_password_pengguna(uid):
     # Update tabel pengguna
     db_execute(conn, "UPDATE pengguna SET password=? WHERE id=?", (hashed_pw, uid))
     
-    # Sync ke tabel users
+    # Sync ke tabel users - kolom 'password' bukan 'password_hash'
     try:
         user_row = db_execute(conn, "SELECT username FROM pengguna WHERE id=?", (uid,)).fetchone()
         if user_row:
-            db_execute(conn, "UPDATE users SET password_hash=? WHERE username=?", (hashed_pw, user_row['username']))
+            db_execute(conn, "UPDATE users SET password=? WHERE username=?", (hashed_pw, user_row['username']))
     except Exception as e:
         print(f"[WARN] Gagal sync ke users: {e}")
     
@@ -4263,26 +4270,14 @@ except Exception as e:
     print(traceback.format_exc())
     _db_init_error = e
 
-# Lazy init handler - akan mencoba init lagi saat request pertama jika gagal
-@app.before_request
-def ensure_db():
-    if '_db_init_error' in globals():
-        g._db_retry_init = True  # Flag untuk skip require_login
-        try:
-            init_db()
-            print("[OK] Database initialized (retry)")
-            del globals()['_db_init_error']
-        except Exception as e:
-            print(f"[ERR] Database init failed again: {e}")
-        finally:
-            g._db_retry_init = False
+# [MERGED] ensure_db sudah digabung ke require_login()
 
 # ─────────────────────────────────────
 #  JALANKAN SERVER (LOCAL DEV)
 # ─────────────────────────────────────
 if __name__ == '__main__':
     print("\n" + "="*50)
-    print("  [TOKO] KasirToko v1.11.3 — Python + Flask + SQLite")
+    print("  [TOKO] KasirToko v2.1.1 — Python + Flask + SQLite")
     print("="*50)
     print("  * Fitur: Scan Barcode | Printer App | Multi User")
     print("")
