@@ -896,12 +896,8 @@ html.light body{color-scheme:light;}
     </button>
     <hr class="drawer-divider">
     
-    <!-- Menu yang bisa diakses superadmin untuk bantu input data -->
-    <button onclick="closeDrawer();openLaporan()"><span class="dn-icon">📊</span>Laporan Penjualan</button>
-    <button onclick="closeDrawer();openDompet()"><span class="dn-icon">💰</span>Dompet / Kas</button>
-    <button onclick="closeDrawer();openPelanggan('kelola')"><span class="dn-icon">👥</span>Pelanggan</button>
-    <button onclick="closeDrawer();openRiwayat()"><span class="dn-icon">📋</span>Riwayat Transaksi</button>
-    <button onclick="closeDrawer();openTutupKasir()" style="position:relative"><span class="dn-icon">🔒</span>Tutup Kasir<span class="tk-badge hidden" id="tkBadgeMob">!</span></button>
+    <!-- Superadmin hanya bisa akses Manajemen Toko, tidak transaksi -->
+    <div style="padding:8px 18px;font-size:11px;color:var(--muted);">Manajemen Toko</div>
     
     <!-- Store Switcher for Superadmin -->
     <div id="storeSwitcherContainer" style="display:none;margin:10px 18px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
@@ -1860,6 +1856,18 @@ html.light body{color-scheme:light;}
     <div class="fg">
       <label>Nama Toko <span style="color:var(--red)">*</span></label>
       <input type="text" id="saEditStoreName" placeholder="Nama toko" style="width:100%;padding:12px;border-radius:10px;">
+    </div>
+    
+    <div class="fg">
+      <label>Slug URL <span style="color:var(--red)">*</span> <small style="color:var(--muted)">(huruf kecil, tanpa spasi)</small></label>
+      <input type="text" id="saEditStoreSlug" placeholder="nama-toko-saya" style="width:100%;padding:12px;border-radius:10px;">
+    </div>
+    
+    <div class="fg">
+      <label>Pemilik Toko <span style="color:var(--red)">*</span></label>
+      <select id="saEditStoreOwner" style="width:100%;padding:12px;border-radius:10px;background:var(--surface);border:1px solid var(--border);color:var(--text);">
+        <option value="">-- Pilih Pemilik --</option>
+      </select>
     </div>
     
     <div class="fg">
@@ -6676,24 +6684,42 @@ async function loadSuperadminStores() {
   showLoading(false);
 }
 
-function openEditStoreSuperadmin(storeId) {
+async function openEditStoreSuperadmin(storeId) {
   const store = superadminStores.find(s => s.id === storeId);
   if (!store) return;
   
+  // Load owners list untuk dropdown
+  await loadOwnersForEditStore();
+  
   document.getElementById('saEditStoreId').value = store.id;
   document.getElementById('saEditStoreName').value = store.name || '';
+  document.getElementById('saEditStoreSlug').value = store.slug || '';
   document.getElementById('saEditStoreAddress').value = store.address || '';
   document.getElementById('saEditStorePhone').value = store.phone || '';
   document.getElementById('saEditStoreEmail').value = store.email || '';
   document.getElementById('saEditStoreStatus').value = store.is_active ? '1' : '0';
+  document.getElementById('saEditStoreOwner').value = store.owner_id || '';
   
   openM('mEditTokoSuperadmin');
+}
+
+async function loadOwnersForEditStore() {
+  try {
+    const owners = await api('/api/admin/owners');
+    const select = document.getElementById('saEditStoreOwner');
+    select.innerHTML = '<option value="">-- Pilih Pemilik --</option>' + 
+      owners.map(o => `<option value="${o.id}">${o.nama} (${o.username})</option>`).join('');
+  } catch(e) {
+    console.error('Gagal load owners:', e);
+  }
 }
 
 async function saveEditStoreSuperadmin() {
   const storeId = document.getElementById('saEditStoreId').value;
   const data = {
     name: document.getElementById('saEditStoreName').value.trim(),
+    slug: document.getElementById('saEditStoreSlug').value.trim(),
+    owner_id: parseInt(document.getElementById('saEditStoreOwner').value) || null,
     address: document.getElementById('saEditStoreAddress').value.trim(),
     phone: document.getElementById('saEditStorePhone').value.trim(),
     email: document.getElementById('saEditStoreEmail').value.trim(),
@@ -6702,6 +6728,16 @@ async function saveEditStoreSuperadmin() {
   
   if (!data.name) {
     showToast('[WARN] Nama toko wajib diisi');
+    return;
+  }
+  
+  if (!data.slug) {
+    showToast('[WARN] Slug wajib diisi');
+    return;
+  }
+  
+  if (!data.owner_id) {
+    showToast('[WARN] Pemilik toko wajib dipilih');
     return;
   }
   

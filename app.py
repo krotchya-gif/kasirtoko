@@ -1337,16 +1337,31 @@ def admin_get_logs():
 @app.route('/api/admin/stores/<int:store_id>', methods=['PUT'])
 @superadmin_required
 def admin_update_store(store_id):
-    """Superadmin update data toko."""
+    """Superadmin update data toko (termasuk slug dan owner)."""
+    import re
     data = request.json
     name = data.get('name', '').strip()
+    slug = data.get('slug', '').strip().lower()
     address = data.get('address', '').strip()
     phone = data.get('phone', '').strip()
     email = data.get('email', '').strip()
     is_active = data.get('is_active', 1)
+    owner_id = data.get('owner_id')
     
     if not name:
         return jsonify({'error': 'Nama toko wajib diisi'}), 400
+    
+    # Generate slug dari name kalau tidak diisi
+    if not slug:
+        slug = re.sub(r'[^\w\s-]', '', name).strip().lower()
+        slug = re.sub(r'[-\s]+', '-', slug)[:50]
+    else:
+        # Validasi slug format
+        slug = re.sub(r'[^a-z0-9-]', '-', slug)[:50]
+        slug = slug.strip('-')
+    
+    if not slug:
+        slug = 'toko-' + str(store_id)
     
     conn = get_db()
     try:
@@ -1356,20 +1371,48 @@ def admin_update_store(store_id):
             conn.close()
             return jsonify({'error': 'Toko tidak ditemukan'}), 404
         
-        # Update toko
-        db_execute(conn, """
+        # Cek slug unik (kecuali untuk toko ini sendiri)
+        existing = db_execute(conn, "SELECT id FROM stores WHERE slug = ? AND id != ?", (slug, store_id)).fetchone()
+        if existing:
+            # Tambahkan angka ke slug jika duplikat
+            base_slug = slug
+            counter = 1
+            while existing:
+                slug = f"{base_slug}-{counter}"
+                existing = db_execute(conn, "SELECT id FROM stores WHERE slug = ? AND id != ?", (slug, store_id)).fetchone()
+                counter += 1
+        
+        # Cek owner_id valid kalau diisi
+        if owner_id:
+            owner = db_execute(conn, "SELECT id FROM users WHERE id = ? AND role = 'pemilik'", (owner_id,)).fetchone()
+            if not owner:
+                conn.close()
+                return jsonify({'error': 'Pemilik tidak valid'}), 400
+        
+        # Build update query dinamis
+        fields = ['name = ?', 'slug = ?', 'address = ?', 'phone = ?', 'email = ?', 'is_active = ?']
+        params = [name, slug, address, phone, email, is_active]
+        
+        if owner_id:
+            fields.append('owner_id = ?')
+            params.append(owner_id)
+        
+        params.append(store_id)
+        
+        db_execute(conn, f"""
             UPDATE stores 
-            SET name = ?, address = ?, phone = ?, email = ?, is_active = ?
+            SET {', '.join(fields)}
             WHERE id = ?
-        """, (name, address, phone, email, is_active, store_id))
+        """, tuple(params))
         
         conn.commit()
         conn.close()
         
         # Log action
-        log_admin_action(session['user_id'], store_id, 'update_store', 'stores', store_id, None, {'name': name})
+        log_admin_action(session['user_id'], store_id, 'update_store', 'stores', store_id, None, 
+                        {'name': name, 'slug': slug, 'owner_id': owner_id})
         
-        return jsonify({'ok': True, 'message': 'Toko berhasil diupdate'})
+        return jsonify({'ok': True, 'message': 'Toko berhasil diupdate', 'slug': slug})
     except Exception as e:
         conn.close()
         return jsonify({'error': str(e)}), 500
@@ -1779,6 +1822,7 @@ def get_kategori():
 #  API: TRANSAKSI
 # ─────────────────────────────────────
 @app.route('/api/transaksi', methods=['POST'])
+@login_required
 def buat_transaksi():
     d = request.json
     items        = d.get('items', [])
@@ -1791,6 +1835,7 @@ def buat_transaksi():
     kembalian    = bayar - total
     pelanggan_id = d.get('pelanggan_id') or None
     metode_bayar = d.get('metode_bayar', 'tunai')
+    store_id     = get_current_store_id()
     
     # Handle piutang/hutang
     is_piutang = metode_bayar == 'piutang'
@@ -1829,10 +1874,10 @@ def buat_transaksi():
         cur = db_execute_insert(conn, 
             """INSERT INTO transaksi
                (no_trx, subtotal, diskon, diskon_val, diskon_tipe, total, bayar, kembalian, 
-                pelanggan_id, metode_bayar, is_lunas, terbayar, sisa_piutang)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                pelanggan_id, metode_bayar, is_lunas, terbayar, sisa_piutang, store_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (no_trx, subtotal, diskon, diskon_val, diskon_tipe, total, bayar, kembalian, 
-             pelanggan_id, metode_bayar, is_lunas, terbayar, sisa_piutang)
+             pelanggan_id, metode_bayar, is_lunas, terbayar, sisa_piutang, store_id)
         )
         trx_id = cur.lastrowid
 
