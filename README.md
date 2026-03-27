@@ -344,6 +344,12 @@ CREATE TABLE piutang_bayar (
 
 ## 📝 Changelog
 
+### v2.1.2 (2026-03-21) - Latest Updates
+- ✅ **Fitur**: Superadmin bisa reset password pemilik
+- ✅ **Fitur**: Emoji produk ditambah (🦷 pasta gigi, dll)
+- ✅ **Fix**: Layout responsive untuk Full HD+ screens
+- ✅ **Fix**: Superadmin tidak akses fitur transaksi (kasir, keranjang, dll)
+
 ### v2.1.1 (2026-03-21) - Bug Fixes
 - ✅ **Fix**: Export PDF crash (koneksi database ditutup terlalu awal)
 - ✅ **Fix**: Multi-tenant data leak - semua query kini filter `store_id`

@@ -365,9 +365,10 @@ CREATE TABLE pengaturan (
 |----------|--------|-------|-----------|
 | `/api/admin/stores` | GET | Superadmin | List semua toko |
 | `/api/admin/stores` | POST | Superadmin | Buat toko baru |
-| `/api/admin/stores/<id>` | PUT | Superadmin | Update data toko |
+| `/api/admin/stores/<id>` | PUT | Superadmin | Update data toko (termasuk slug & owner) |
 | `/api/admin/owners` | GET | Superadmin | List semua pemilik |
 | `/api/admin/owners` | POST | Superadmin | Buat pemilik baru |
+| `/api/admin/owners/<id>/reset-password` | POST | Superadmin | Reset password pemilik |
 | `/api/admin/enter-store/<id>` | POST | Superadmin | Ghost mode masuk toko |
 | `/api/admin/exit-store` | POST | Superadmin | Keluar ghost mode |
 | `/api/admin/logs` | GET | Superadmin | Audit logs |
@@ -549,16 +550,17 @@ CREATE TABLE pengaturan (
 
 | Fitur | Superadmin | Pemilik | Karyawan |
 |-------|------------|---------|----------|
-| Kasir/Transaksi | ✓ (Ghost Mode) | ✓ | ✓ |
-| Lihat Produk | ✓ | ✓ | ✓ |
-| Kelola Produk | ✓ | ✓ | ✗ |
-| Lihat Laporan | ✓ | ✓ | ✗ |
-| Lihat Dompet | ✓ | ✓ | ✗ |
-| Void Transaksi | ✓ | ✓ | ✗ |
-| Adjust Stok | ✓ | ✓ | ✗ |
-| Kelola Pengguna | ✓ | ✓ (tokonya) | ✗ |
-| Tutup Kasir | ✓ | ✓ | ✓ (create only) |
+| Kasir/Transaksi | ✗ | ✓ | ✓ |
+| Lihat Produk | ✓ (View Only) | ✓ | ✓ |
+| Kelola Produk | ✗ | ✓ | ✗ |
+| Lihat Laporan | ✗ | ✓ | ✗ |
+| Lihat Dompet | ✗ | ✓ | ✗ |
+| Void Transaksi | ✗ | ✓ | ✗ |
+| Adjust Stok | ✗ | ✓ | ✗ |
+| Kelola Pengguna | ✗ | ✓ (tokonya) | ✗ |
+| Tutup Kasir | ✗ | ✓ | ✓ (create only) |
 | Multi Tenant Panel | ✓ | ✗ | ✗ |
+| Reset Password Pemilik | ✓ | ✗ | ✗ |
 
 ---
 
@@ -956,7 +958,31 @@ CREATE INDEX idx_piutang_bayar_trxid ON piutang_bayar(transaksi_id);
 
 ---
 
-## 🐛 13. BUG FIXES (v2.1.1)
+## 🆕 13. FITUR BARU (v2.1.2)
+
+### Superadmin Reset Password Pemilik
+- **Endpoint**: `POST /api/admin/owners/<owner_id>/reset-password`
+- **Akses**: Superadmin only
+- **Deskripsi**: Superadmin dapat mereset password pemilik jika lupa
+
+### Emoji Produk Diperbanyak
+- **Kategori Makanan**: +24 emoji baru (🦀🦞🦐🦑🦪 dll)
+- **Kategori Minuman**: +14 emoji baru (🍼🍶🍻 dll)
+- **Kategori Kebutuhan Rumah**: +14 emoji baru (🦷🧊🛒🧮 dll) - termasuk 🦷 untuk pasta gigi
+- **Kategori Umum**: +50 emoji baru (📎✏️🔧💼📁 dll)
+
+### Responsive Layout Full HD+
+- Support layar 1080x2400 (20:9, 21:9)
+- Viewport units: `dvh`, `vmin`, `-webkit-fill-available`
+- Grid adaptif: 2→3→4 kolom berdasarkan lebar layar
+
+### Superadmin Restriction
+- Superadmin tidak bisa akses fitur transaksi (kasir, keranjang, piutang, tutup kasir)
+- Hanya bisa akses Superadmin Panel (manajemen toko & pemilik)
+
+---
+
+## 🐛 14. BUG FIXES (v2.1.1)
 
 ### Critical Fixes
 
@@ -1017,7 +1043,7 @@ def get_example():
 
 ---
 
-## 📞 14. DEFAULT LOGIN
+## 📞 15. DEFAULT LOGIN
 
 | Username | Password | Role | Akses |
 |----------|----------|------|-------|
@@ -1027,7 +1053,7 @@ def get_example():
 
 ---
 
-## 📄 15. LICENSE
+## 📄 16. LICENSE
 
 MIT License - Bebas digunakan untuk personal maupun komersial.
 
