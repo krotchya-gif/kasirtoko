@@ -1283,6 +1283,45 @@ def admin_list_owners():
     return jsonify(owners)
 
 
+@app.route('/api/admin/owners/<int:owner_id>/reset-password', methods=['POST'])
+@superadmin_required
+def admin_reset_password_owner(owner_id):
+    """Superadmin reset password pemilik."""
+    data = request.json
+    password = data.get('password', '').strip()
+    
+    if not password:
+        return jsonify({'error': 'Password baru wajib diisi'}), 400
+    if len(password) < 6:
+        return jsonify({'error': 'Password minimal 6 karakter'}), 400
+    
+    conn = get_db()
+    
+    # Cek pemilik exists
+    owner = db_execute(conn, "SELECT * FROM users WHERE id = ? AND role = 'pemilik'", (owner_id,)).fetchone()
+    if not owner:
+        conn.close()
+        return jsonify({'error': 'Pemilik tidak ditemukan'}), 404
+    
+    # Update password
+    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
+    db_execute(conn, "UPDATE users SET password = ? WHERE id = ?", (hashed_pw, owner_id))
+    
+    # Sync ke tabel pengguna juga
+    try:
+        db_execute(conn, "UPDATE pengguna SET password = ? WHERE username = ?", (hashed_pw, owner['username']))
+    except:
+        pass
+    
+    conn.commit()
+    conn.close()
+    
+    # Log action
+    log_admin_action(session['user_id'], None, 'reset_password_owner', 'users', owner_id, None, {'owner_username': owner['username']})
+    
+    return jsonify({'ok': True, 'message': f'Password {owner["nama"]} berhasil direset'})
+
+
 @app.route('/api/admin/enter-store/<int:store_id>', methods=['POST'])
 @superadmin_required
 def admin_enter_store(store_id):
