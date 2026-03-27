@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
 <title>KasirToko</title>
 <!-- PWA -->
 <link rel="manifest" href="/static/manifest.json">
@@ -37,8 +37,10 @@ html.light{
   --bg:#f5f5f7;--surface:#ffffff;--surface2:#f0f0f5;--border:#e0e0ea;
   --text:#1a1a2e;--muted:#6b7280;
 }
-*{margin:0;padding:0;box-sizing:border-box;}
-body{background:var(--bg);color:var(--text);font-family:var(--fb);height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+/* Support untuk viewport di iOS dan Android Full HD+ */
+html{height:100%;height:-webkit-fill-available;}
+body{background:var(--bg);color:var(--text);font-family:var(--fb);height:100vh;height:100dvh;height:-webkit-fill-available;min-height:100vh;min-height:100dvh;min-height:-webkit-fill-available;overflow:hidden;display:flex;flex-direction:column;}
 html.light body{color-scheme:light;}
 
 /* TOPBAR */
@@ -65,6 +67,47 @@ html.light body{color-scheme:light;}
 
 /* BOTTOM NAV */
 .bottom-nav{display:none;}
+
+/* ═════════════════════════════════════
+   HIGH-DPI / FULL HD+ SCREENS SUPPORT
+   ═════════════════════════════════════ */
+/* Fix untuk layar Full HD+ (1080x2400+) dengan pixel ratio tinggi */
+@media (max-width:768px) and (-webkit-min-device-pixel-ratio: 2),
+       (max-width:768px) and (min-resolution: 2dppx) {
+  /* Scaling untuk high-density screens */
+  html{font-size: calc(14px + 0.5vmin);}
+  body{font-size: calc(14px + 0.5vmin);}
+  
+  /* Pastikan grid tetap proporsional */
+  .grid{grid-template-columns:repeat(auto-fill,minmax(min(160px, 45vw),1fr));grid-auto-rows:minmax(140px, 18vh);}
+  
+  /* Touch targets lebih besar untuk high-dpi */
+  .pcard{padding:clamp(12px, 3vw, 18px);}
+  .pcard .pe{font-size:clamp(28px, 8vmin, 36px);}
+  .pcard .pn{font-size:clamp(12px, 3.5vmin, 14px);}
+  .pcard .ph{font-size:clamp(13px, 4vmin, 15px);}
+  
+  /* Typography responsive dengan vmin */
+  .logo{font-size:clamp(18px, 5vmin, 22px);}
+  .tab{font-size:clamp(12px, 3vmin, 14px);padding:clamp(8px, 2vmin, 12px) clamp(14px, 4vmin, 18px);}
+  
+  /* Pastikan modal tidak terlalu kecil di layar tinggi */
+  .mbox{width:min(94%, 480px);padding:clamp(20px, 5vmin, 28px);}
+  
+  /* Grid item proportions */
+  .pcard{aspect-ratio: 1 / 1.15;}
+}
+
+/* Support untuk layar sangat tinggi (Full HD+ 20:9, 21:9) */
+@media (max-width:768px) and (min-aspect-ratio: 1/2.2) {
+  .grid{grid-template-columns:repeat(3, 1fr);grid-auto-rows: minmax(130px, 16vh);}
+  .pcard .pe{font-size: clamp(24px, 6vmin, 32px);}
+}
+
+/* Support untuk layar pendek (HD/HD+ 16:9) */
+@media (max-width:768px) and (max-aspect-ratio: 1/1.8) {
+  .grid{grid-template-columns:repeat(2, 1fr);grid-auto-rows: minmax(120px, 20vh);}
+}
 
 /* DRAWER */
 .drawer-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:299;backdrop-filter:blur(3px);}
@@ -533,7 +576,7 @@ html.light body{color-scheme:light;}
    ══════════════════════════════════ */
 @media (max-width:768px){
   /* body: ruang untuk bottom nav + safe area sistem */
-  body{height:100dvh;padding-bottom:calc(64px + env(safe-area-inset-bottom,0px));font-size:15px;}
+  body{height:100vh;height:100dvh;height:-webkit-fill-available;min-height:100vh;min-height:100dvh;padding-bottom:calc(64px + env(safe-area-inset-bottom,0px));font-size:15px;}
   
   /* Better font rendering on mobile */
   *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;}
@@ -548,16 +591,27 @@ html.light body{color-scheme:light;}
   .logo{font-size:20px;}
 
   /* main layout: single column */
-  .main{grid-template-columns:1fr;}
+  .main{grid-template-columns:1fr;height:100%;min-height:0;}
+  
+  /* left panel: proper height handling untuk Full HD+ */
+  .left{height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
 
   /* right panel (cart): hidden by default, full screen when shown */
-  .right{display:none;position:fixed;inset:0;bottom:64px;z-index:200;overflow-y:auto;background:var(--surface);}
-  .right.mob-show{display:flex;}
+  .right{display:none;position:fixed;inset:0;bottom:64px;z-index:200;overflow-y:auto;background:var(--surface);-webkit-overflow-scrolling:touch;}
+  .right.mob-show{display:flex;animation:slideInRight .25s ease;}
+  @keyframes slideInRight{from{transform:translateX(100%);}to{transform:translateX(0);}}
 
-  /* product grid: larger touch targets on mobile */
-  .grid{grid-template-columns:repeat(2,1fr);grid-auto-rows:140px;padding:12px;gap:10px;}
+  /* product grid: responsive untuk semua ukuran mobile termasuk Full HD+ */
+  .grid{grid-template-columns:repeat(2,1fr);grid-auto-rows:minmax(140px, 18vh);padding:12px;gap:10px;}
   @media (min-width:400px){
     .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}
+  }
+  /* Fix untuk Full HD+ - grid lebih banyak kolom jika layar lebar */
+  @media (min-width:480px) and (max-width:768px){
+    .grid{grid-template-columns:repeat(3, 1fr);grid-auto-rows:minmax(130px, 16vh);}
+  }
+  @media (min-width:640px) and (max-width:768px){
+    .grid{grid-template-columns:repeat(4, 1fr);grid-auto-rows:minmax(120px, 15vh);}
   }
   .pcard{padding:14px 12px 11px;border-radius:16px;}
   .pcard .pe{font-size:32px;margin-bottom:8px;}
@@ -576,9 +630,9 @@ html.light body{color-scheme:light;}
   .tab{padding:8px 16px;font-size:13px;border-radius:20px;}
 
   /* modal: full width on mobile with better padding */
-  .mbox{width:94%;padding:24px 18px;max-height:90vh;overflow-y:auto;border-radius:20px;}
+  .mbox{width:94%;padding:24px 18px;max-height:90vh;max-height:90dvh;overflow-y:auto;border-radius:20px;}
   .mbox.wide{max-width:94%;}
-  .mbox.xl{max-width:94%;max-height:90vh;}
+  .mbox.xl{max-width:94%;max-height:90vh;max-height:90dvh;}
   .mtit{font-size:20px;}
   .msub{font-size:14px;}
   /* form: single column on mobile */
@@ -591,7 +645,7 @@ html.light body{color-scheme:light;}
   /* keranjang - improved for mobile */
   .kh{padding:14px 16px;}
   .kt{font-size:16px;}
-  .klist{padding:12px;max-height:40vh;}
+  .klist{padding:12px;max-height:40vh;max-height:40dvh;}
   .ki{padding:12px;border-radius:12px;margin-bottom:8px;}
   .ki .ie{font-size:24px;}
   .ki .in{font-size:14px;}
