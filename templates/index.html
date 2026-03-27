@@ -771,6 +771,7 @@ html.light body{color-scheme:light;}
     <div class="grid" id="produkGrid"></div>
   </div>
 
+  {% if not user.is_superadmin %}
   <div class="right">
     <div class="kh">
       <button class="mob-back-btn" onclick="mobView('kasir')" style="display:none;background:none;border:none;color:var(--accent);font-size:22px;cursor:pointer;margin-right:6px;line-height:1;">←</button>
@@ -830,10 +831,25 @@ html.light body{color-scheme:light;}
       <button class="btn-pay" id="btnPay" onclick="prosesTrx()" disabled>💳 BAYAR SEKARANG</button>
     </div>
   </div>
+  {% else %}
+  <!-- SUPERADMIN: Hide kasir area, show info -->
+  <div class="right" style="display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:40px;background:var(--surface2);">
+    <div style="font-size:64px;margin-bottom:20px;">👑</div>
+    <div style="font-size:20px;font-weight:700;color:var(--accent);margin-bottom:12px;">Mode Superadmin</div>
+    <div style="font-size:14px;color:var(--muted);max-width:280px;line-height:1.6;">
+      Superadmin tidak dapat melakukan transaksi kasir.<br>
+      Silakan gunakan menu <strong>Superadmin Panel</strong> untuk mengelola toko dan pemilik.
+    </div>
+    <button class="mbtn pri" onclick="openSuperadminPanel()" style="margin-top:24px;padding:12px 24px;font-size:14px;">
+      👑 Buka Superadmin Panel
+    </button>
+  </div>
+  {% endif %}
 </div>
 
 <!-- BOTTOM NAV (mobile only) -->
 <nav class="bottom-nav" id="bottomNav">
+  {% if not user.is_superadmin %}
   <button id="bn-kasir" class="active" onclick="mobView('kasir')">
     <span class="bn-icon">🏪</span>Kasir
   </button>
@@ -842,6 +858,7 @@ html.light body{color-scheme:light;}
     <span class="bn-badge hidden" id="bnBadge">0</span>
     Keranjang
   </button>
+  {% endif %}
   {% if user.role == 'pemilik' %}
   <button onclick="openKelola()">
     <span class="bn-icon">📦</span>Produk
@@ -849,12 +866,17 @@ html.light body{color-scheme:light;}
   <button onclick="openLaporan()">
     <span class="bn-icon">📊</span>Laporan
   </button>
-  {% else %}
+  {% elif not user.is_superadmin %}
   <button onclick="openPelanggan('kelola')">
     <span class="bn-icon">👥</span>Pelanggan
   </button>
   <button onclick="openRiwayat()">
     <span class="bn-icon">📋</span>Riwayat
+  </button>
+  {% endif %}
+  {% if user.is_superadmin %}
+  <button onclick="openSuperadminPanel()">
+    <span class="bn-icon">👑</span>Superadmin
   </button>
   {% endif %}
   <button onclick="openDrawer()">
