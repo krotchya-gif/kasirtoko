@@ -1,4 +1,4 @@
-﻿"""
+"""
 KasirToko — Backend Flask + SQLite/PostgreSQL
 Jalankan: python app.py
 Buka browser: http://localhost:5000
@@ -591,8 +591,8 @@ def init_db():
             CREATE TABLE IF NOT EXISTS pengaturan (
                 kunci TEXT NOT NULL,
                 nilai TEXT NOT NULL,
-                store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE,
-                PRIMARY KEY (kunci)
+                store_id INTEGER DEFAULT 0 REFERENCES stores(id) ON DELETE CASCADE,
+                PRIMARY KEY (kunci, store_id)
             )
         """)
         # Tambahkan index untuk SQLite
@@ -619,7 +619,7 @@ def init_db():
         if USE_POSTGRES:
             c.execute("INSERT INTO pengaturan (kunci, nilai, store_id) VALUES (?, ?, NULL) ON CONFLICT (kunci) DO NOTHING", (k, v))
         else:
-            c.execute("INSERT OR IGNORE INTO pengaturan (kunci, nilai, store_id) VALUES (?, ?, NULL)", (k, v))
+            c.execute("INSERT OR IGNORE INTO pengaturan (kunci, nilai, store_id) VALUES (?, ?, 0)", (k, v))
 
     # Insert produk default jika tabel kosong
     c.execute("SELECT COUNT(*) as count FROM produk")
@@ -749,16 +749,25 @@ def migrate_multi_tenant(c, use_postgres):
     has_stores = c.fetchone()['count'] > 0
     
     if not has_stores:
-        # Ambil data pengaturan
-        c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'nama_toko'")
+        # Ambil data pengaturan global (store_id=0 untuk SQLite, NULL untuk Postgres)
+        if use_postgres:
+            c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'nama_toko' AND store_id IS NULL")
+        else:
+            c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'nama_toko' AND store_id = 0")
         result = c.fetchone()
         nama_toko = result['nilai'] if result else 'Toko Saya'
         
-        c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'alamat'")
+        if use_postgres:
+            c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'alamat' AND store_id IS NULL")
+        else:
+            c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'alamat' AND store_id = 0")
         result = c.fetchone()
         alamat = result['nilai'] if result else ''
         
-        c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'telp'")
+        if use_postgres:
+            c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'telp' AND store_id IS NULL")
+        else:
+            c.execute("SELECT nilai FROM pengaturan WHERE kunci = 'telp' AND store_id = 0")
         result = c.fetchone()
         telp = result['nilai'] if result else ''
         
@@ -808,18 +817,49 @@ def migrate_multi_tenant(c, use_postgres):
         except Exception:
             pass
     
-    # 5b. Migrasi tabel pengaturan - tambah store_id jika belum ada
+    # 5b. Migrasi tabel pengaturan - tambah store_id dan perbaiki primary key untuk multi-store
     try:
         if use_postgres:
-            c.execute("ALTER TABLE pengaturan ADD COLUMN store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE")
+            c.execute("ALTER TABLE pengaturan ADD COLUMN IF NOT EXISTS store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE")
             # Buat ulang primary key untuk support composite
             c.execute("ALTER TABLE pengaturan DROP CONSTRAINT IF EXISTS pengaturan_pkey")
             c.execute("ALTER TABLE pengaturan ADD PRIMARY KEY (kunci, COALESCE(store_id, 0))")
         else:
-            c.execute("ALTER TABLE pengaturan ADD COLUMN store_id INTEGER REFERENCES stores(id) ON DELETE CASCADE")
-            c.execute("CREATE INDEX IF NOT EXISTS idx_pengaturan_store ON pengaturan(store_id)")
-    except Exception:
-        pass  # Kolom sudah ada atau error lain
+            # SQLite: periksa apakah perlu migrasi (cek apakah pk hanya kunci saja)
+            c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='pengaturan'")
+            table_sql = c.fetchone()
+            if table_sql and 'PRIMARY KEY (kunci)' in table_sql['sql'] and 'PRIMARY KEY (kunci, store_id)' not in table_sql['sql']:
+                # Recreate tabel dengan skema baru
+                print("[MIGRASI] Memperbarui tabel pengaturan untuk multi-store...")
+                # 1. Rename tabel lama
+                c.execute("ALTER TABLE pengaturan RENAME TO pengaturan_old")
+                # 2. Buat tabel baru dengan skema benar
+                c.execute("""
+                    CREATE TABLE pengaturan (
+                        kunci TEXT NOT NULL,
+                        nilai TEXT NOT NULL,
+                        store_id INTEGER DEFAULT 0 REFERENCES stores(id) ON DELETE CASCADE,
+                        PRIMARY KEY (kunci, store_id)
+                    )
+                """)
+                # 3. Pindahkan data - global settings pakai store_id=0, yang lain tetap
+                c.execute("""
+                    INSERT INTO pengaturan (kunci, nilai, store_id)
+                    SELECT kunci, nilai, COALESCE(store_id, 0) FROM pengaturan_old
+                """)
+                # 4. Hapus tabel lama
+                c.execute("DROP TABLE pengaturan_old")
+                # 5. Buat index
+                c.execute("CREATE INDEX IF NOT EXISTS idx_pengaturan_store ON pengaturan(store_id)")
+                print("[MIGRASI] Tabel pengaturan berhasil diperbarui")
+            else:
+                # Tambah kolom store_id jika belum ada
+                try:
+                    c.execute("ALTER TABLE pengaturan ADD COLUMN store_id INTEGER DEFAULT 0 REFERENCES stores(id) ON DELETE CASCADE")
+                except Exception:
+                    pass  # Kolom sudah ada
+    except Exception as e:
+        print(f"[WARN] Migrasi pengaturan: {e}")
     
     # 6. Assign karyawan ke toko (jika belum ada di user_stores)
     c.execute("SELECT COUNT(*) as count FROM user_stores")
@@ -1587,12 +1627,12 @@ def get_pengaturan():
                 (store_id,)
             ).fetchall()
         else:
-            # SQLite: gunakan UNION untuk ordering
+            # SQLite: gunakan UNION untuk ordering, global settings pakai store_id=0
             rows = db_execute(conn, 
                 """SELECT kunci, nilai FROM pengaturan WHERE store_id = ?
                    UNION ALL
                    SELECT kunci, nilai FROM pengaturan 
-                   WHERE store_id IS NULL 
+                   WHERE store_id = 0 
                      AND kunci NOT IN (SELECT kunci FROM pengaturan WHERE store_id = ?)""",
                 (store_id, store_id)
             ).fetchall()
@@ -1602,7 +1642,10 @@ def get_pengaturan():
             result[r['kunci']] = r['nilai']
     else:
         # Fallback: ambil semua pengaturan global
-        rows = db_execute(conn, "SELECT kunci, nilai FROM pengaturan WHERE store_id IS NULL").fetchall()
+        if USE_POSTGRES:
+            rows = db_execute(conn, "SELECT kunci, nilai FROM pengaturan WHERE store_id IS NULL").fetchall()
+        else:
+            rows = db_execute(conn, "SELECT kunci, nilai FROM pengaturan WHERE store_id = 0").fetchall()
         result = {r['kunci']: r['nilai'] for r in rows}
     
     # Jika ada store_id di session, ambil info toko dari tabel stores
@@ -1645,13 +1688,9 @@ def save_pengaturan():
                 (k, str(v), store_id)
             )
         else:
-            # SQLite: delete dulu lalu insert (upsert workaround untuk partial unique index)
+            # SQLite: replace into langsung (upsert workaround untuk partial unique index)
             db_execute(conn, 
-                "DELETE FROM pengaturan WHERE kunci = ? AND (store_id = ? OR (store_id IS NULL AND ? IS NULL))",
-                (k, store_id, store_id)
-            )
-            db_execute(conn, 
-                "INSERT INTO pengaturan (kunci, nilai, store_id) VALUES (?,?,?)",
+                "REPLACE INTO pengaturan (kunci, nilai, store_id) VALUES (?,?,?)",
                 (k, str(v), store_id)
             )
     
@@ -2682,11 +2721,25 @@ def bayar_piutang(tid):
         sisa_baru = trx['total'] - total_terbayar
         is_lunas = 1 if sisa_baru <= 0 else 0
         
-        db_execute(conn, """
-            UPDATE transaksi 
-            SET terbayar=?, sisa_piutang=?, is_lunas=?
-            WHERE id=?
-        """, (total_terbayar, max(0, sisa_baru), is_lunas, tid))
+        if is_lunas == 1:
+            if USE_POSTGRES:
+                db_execute(conn, """
+                    UPDATE transaksi 
+                    SET terbayar=?, sisa_piutang=?, is_lunas=?, waktu=CURRENT_TIMESTAMP
+                    WHERE id=?
+                """, (total_terbayar, max(0, sisa_baru), is_lunas, tid))
+            else:
+                db_execute(conn, """
+                    UPDATE transaksi 
+                    SET terbayar=?, sisa_piutang=?, is_lunas=?, waktu=datetime('now','localtime')
+                    WHERE id=?
+                """, (total_terbayar, max(0, sisa_baru), is_lunas, tid))
+        else:
+            db_execute(conn, """
+                UPDATE transaksi 
+                SET terbayar=?, sisa_piutang=?, is_lunas=?
+                WHERE id=?
+            """, (total_terbayar, max(0, sisa_baru), is_lunas, tid))
         
         # Masukkan ke kas (pemasukan dari pelunasan piutang)
         db_execute(conn,
@@ -2826,44 +2879,87 @@ def generate_struk_image(tid):
         "SELECT * FROM transaksi_item WHERE transaksi_id=?", (tid,)
     ).fetchall()
     
-    # Get pengaturan toko
-    pengaturan = db_execute(conn, "SELECT kunci, nilai FROM pengaturan").fetchall()
-    toko = {p['kunci']: p['nilai'] for p in pengaturan}
+    # Get pengaturan toko - filter by store_id dari transaksi
+    trx_store_id = trx.get('store_id') or 0
+    if USE_POSTGRES:
+        pengaturan_rows = db_execute(conn, 
+            """SELECT kunci, nilai FROM pengaturan WHERE store_id = %s OR store_id IS NULL 
+               ORDER BY store_id NULLS LAST""", (trx_store_id,)
+        ).fetchall()
+    else:
+        # SQLite: gunakan UNION untuk mendapatkan store-specific + global fallback
+        pengaturan_rows = db_execute(conn, 
+            """SELECT kunci, nilai FROM pengaturan WHERE store_id = ?
+               UNION ALL
+               SELECT kunci, nilai FROM pengaturan 
+               WHERE store_id = 0 
+                 AND kunci NOT IN (SELECT kunci FROM pengaturan WHERE store_id = ?)""",
+            (trx_store_id, trx_store_id)
+        ).fetchall()
+    toko = {p['kunci']: p['nilai'] for p in pengaturan_rows}
+    
+    # Override dengan data dari tabel stores (sama seperti get_pengaturan)
+    if trx_store_id:
+        store = db_execute(conn, 
+            "SELECT name, address, phone, email FROM stores WHERE id = ?",
+            (trx_store_id,)
+        ).fetchone()
+        if store:
+            toko['nama_toko'] = store['name']
+            if store['address']:
+                toko['alamat'] = store['address']
+            if store['phone']:
+                toko['telp'] = store['phone']
+    
     conn.close()
     
     try:
-        # Ukuran kertas thermal (58mm width ~ 220px at 96 DPI)
-        WIDTH = 220
-        MARGIN = 10
-        LINE_HEIGHT = 16
-        HEADER_HEIGHT = 80
-        FOOTER_HEIGHT = 60
+        # Ukuran struk digital high-res (lebar 800px agar jelas saat dibagikan)
+        WIDTH = 800
+        MARGIN = 40
+        LINE_HEIGHT = 42
+        HEADER_HEIGHT = 160
+        FOOTER_HEIGHT = 120
         
         # Hitung total height
-        item_height = len(items) * (LINE_HEIGHT * 2 + 4)  # nama + qty x harga
-        summary_height = LINE_HEIGHT * 6  # subtotal, diskon, total, bayar, kembalian, metode
-        total_height = HEADER_HEIGHT + item_height + summary_height + FOOTER_HEIGHT + 40
+        item_height = len(items) * (LINE_HEIGHT * 2 + 8)  # nama + qty x harga
+        summary_height = LINE_HEIGHT * 7  # subtotal, diskon, total, bayar, kembalian, metode + padding
+        total_height = HEADER_HEIGHT + item_height + summary_height + FOOTER_HEIGHT + 60
         
         # Buat image
         img = Image.new('RGB', (WIDTH, total_height), color='#1a1d27')
         draw = ImageDraw.Draw(img)
         
-        # Font (gunakan default jika custom font tidak tersedia)
-        try:
-            font_title = ImageFont.truetype("arial.ttf", 14)
-            font_normal = ImageFont.truetype("arial.ttf", 11)
-            font_small = ImageFont.truetype("arial.ttf", 9)
-        except:
-            font_title = ImageFont.load_default()
-            font_normal = ImageFont.load_default()
-            font_small = ImageFont.load_default()
+        # Coba load font sistem yang umum (macOS, Linux, Windows)
+        font_paths = [
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "arial.ttf"
+        ]
+        
+        def load_font(size):
+            for path in font_paths:
+                try:
+                    return ImageFont.truetype(path, size)
+                except Exception:
+                    continue
+            return ImageFont.load_default()
+        
+        font_title = load_font(36)
+        font_normal = load_font(28)
+        font_small = load_font(24)
+        font_large = load_font(32)
         
         y = MARGIN
         
         # Header Toko
         nama_toko = toko.get('nama_toko', 'TOKO')
         draw.text((WIDTH//2, y), nama_toko, fill='#f5a623', font=font_title, anchor='mt')
-        y += LINE_HEIGHT + 5
+        y += LINE_HEIGHT + 10
         
         alamat = toko.get('alamat', '')
         if alamat:
@@ -2875,9 +2971,9 @@ def generate_struk_image(tid):
             draw.text((WIDTH//2, y), f'Telp: {telp}', fill='#8891a8', font=font_small, anchor='mt')
             y += LINE_HEIGHT
         
-        y += 10
-        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=1)
-        y += 10
+        y += 20
+        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=2)
+        y += 20
         
         # Info Transaksi
         waktu = datetime.strptime(trx['waktu'], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y %H:%M')
@@ -2894,27 +2990,27 @@ def generate_struk_image(tid):
             draw.text((MARGIN, y), f"Pelanggan: {trx['pelanggan_nama']}", fill='#f0f0f8', font=font_small)
             y += LINE_HEIGHT
         
-        y += 5
-        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=1)
-        y += 10
+        y += 15
+        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=2)
+        y += 20
         
         # Items
         for item in items:
-            # Nama produk (wrap jika terlalu panjang)
-            nama = item['nama_produk'][:25]
+            # Nama produk (lebih panjang karena lebar besar)
+            nama = item['nama_produk'][:45]
             draw.text((MARGIN, y), f"{item['emoji']} {nama}", fill='#f0f0f8', font=font_normal)
             y += LINE_HEIGHT
             
             # Qty x Harga = Subtotal
             qty_harga = f"{item['qty']} x {item['harga']:,}".replace(',', '.')
-            subtotal = f"{item['subtotal']:,}".replace(',', '.')
-            draw.text((MARGIN + 10, y), qty_harga, fill='#8891a8', font=font_small)
-            draw.text((WIDTH-MARGIN, y), subtotal, fill='#f0f0f8', font=font_normal, anchor='rt')
-            y += LINE_HEIGHT + 4
+            subtotal = f"Rp {item['subtotal']:,}".replace(',', '.')
+            draw.text((MARGIN + 20, y), qty_harga, fill='#8891a8', font=font_small)
+            draw.text((WIDTH-MARGIN, y), subtotal, fill='#f0f0f8', font=font_large, anchor='rt')
+            y += LINE_HEIGHT + 8
         
-        y += 5
-        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=1)
-        y += 10
+        y += 15
+        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=2)
+        y += 20
         
         # Summary
         def draw_row(label, value, color='#f0f0f8', bold=False):
@@ -2943,14 +3039,14 @@ def generate_struk_image(tid):
         metode = (trx.get('metode_bayar') or 'tunai').upper()
         draw_row('Metode', metode)
         
-        y += 5
-        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=1)
-        y += 10
+        y += 15
+        draw.line([(MARGIN, y), (WIDTH-MARGIN, y)], fill='#2e3244', width=2)
+        y += 20
         
         # Footer
         pesan = toko.get('pesan_struk', 'Terima kasih!')
         draw.text((WIDTH//2, y), pesan, fill='#8891a8', font=font_small, anchor='mt')
-        y += LINE_HEIGHT + 5
+        y += LINE_HEIGHT + 10
         
         draw.text((WIDTH//2, y), '--- KasirToko ---', fill='#f5a623', font=font_small, anchor='mt')
         

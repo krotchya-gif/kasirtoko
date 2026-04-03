@@ -5,6 +5,26 @@ Format: `[Versi] — Tanggal — Ringkasan`
 
 ---
 
+## [v2.1.0] — 2026-04-04 — Perbaikan Mobile, Autocomplete Pelanggan & Kualitas Struk
+
+### 🐛 Bug Fix
+- **Desktop layout keranjang** — Memperbaiki `.main` grid agar panel keranjang tidak keluar viewport dan kembali bisa scroll dengan baik
+- **Flicker/blank saat pilih produk** — Menghapus `will-change` dan `contain` berlebihan dari CSS mobile yang menyebabkan repaint layer penuh di Chrome
+- **Bottom-nav di desktop** — Menambahkan `.bottom-nav{display:none}` untuk menyembunyikan nav mobile di layar besar
+- **Nama toko salah di share image** — `generate_struk_image` sekarang meng-override `nama_toko`, `alamat`, `telp` dari tabel `stores` (sama seperti PDF)
+
+### ✨ Fitur Baru
+- **Autocomplete pelanggan di kasir** — Input text pelanggan dengan dropdown autocomplete dari daftar pelanggan
+- **Auto-create pelanggan** — Jika nama yang diketik tidak ada di daftar, pelanggan baru otomatis dibuat saat transaksi diproses
+- **Dompet/Kas di topbar mobile (Pemilik)** — Ikon 💰 Dompet/Kas dipindahkan ke pojok kanan atas header mobile; ikon keranjang 🛒 tetap ada untuk karyawan
+- **Keranjang mobile full-height** — Panel keranjang di mobile sekarang full screen ke bawah, menghilangkan celah kosong yang menyebabkan ketukan salah
+
+### 🔧 Enhancement
+- **Kualitas gambar struk digital** — Resolusi diperbesar dari 220px menjadi **800px lebar**, font lebih besar dan tebal, sehingga jelas saat dibagikan ke WhatsApp/Instagram
+- **Input pelanggan lebih ergonomis** — Tombol "Pilih" pelanggan diganti dengan input field + tombol Pilih di sampingnya
+
+---
+
 ## [v2.0.0] — 2026-03-17 — 🎉 Major Update
 
 ### ✨ Fitur Baru

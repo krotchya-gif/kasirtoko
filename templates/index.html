@@ -16,6 +16,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/static/favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600&display=swap" rel="stylesheet">
 <!-- jsPDF untuk generate PDF struk -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -39,12 +40,16 @@ html.light{
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 /* Support untuk viewport di iOS dan Android Full HD+ */
-html{height:100%;height:-webkit-fill-available;}
-body{background:var(--bg);color:var(--text);font-family:var(--fb);height:100vh;height:100dvh;height:-webkit-fill-available;min-height:100vh;min-height:100dvh;min-height:-webkit-fill-available;overflow:hidden;display:flex;flex-direction:column;}
+html,body{height:100%;margin:0;padding:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--fb);}
+body{display:flex;flex-direction:column;width:100vw;}
+.bottom-nav{display:none;}
+@media (max-width:768px){
+  body{position:fixed;inset:0;height:100%;z-index:1;}
+}
 html.light body{color-scheme:light;}
 
 /* TOPBAR */
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:56px;flex-shrink:0;gap:10px;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 18px;height:56px;flex-shrink:0;gap:10px;z-index:500;}
 .logo{font-family:var(--fh);font-size:18px;font-weight:800;white-space:nowrap;}
 .logo span{color:var(--accent);}
 .topbar-r{display:flex;gap:7px;align-items:center;}
@@ -65,54 +70,15 @@ html.light body{color-scheme:light;}
 .mob-cart-badge{position:absolute;top:2px;right:2px;background:var(--accent);color:#111;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none;}
 .mob-cart-badge.hidden{display:none;}
 
-/* BOTTOM NAV */
-.bottom-nav{display:none;}
-
-/* ═════════════════════════════════════
-   HIGH-DPI / FULL HD+ SCREENS SUPPORT
-   ═════════════════════════════════════ */
-/* Fix untuk layar Full HD+ (1080x2400+) dengan pixel ratio tinggi */
-@media (max-width:768px) and (-webkit-min-device-pixel-ratio: 2),
-       (max-width:768px) and (min-resolution: 2dppx) {
-  /* Scaling untuk high-density screens */
-  html{font-size: calc(14px + 0.5vmin);}
-  body{font-size: calc(14px + 0.5vmin);}
-  
-  /* Pastikan grid tetap proporsional */
-  .grid{grid-template-columns:repeat(auto-fill,minmax(min(160px, 45vw),1fr));grid-auto-rows:minmax(140px, 18vh);}
-  
-  /* Touch targets lebih besar untuk high-dpi */
-  .pcard{padding:clamp(12px, 3vw, 18px);}
-  .pcard .pe{font-size:clamp(28px, 8vmin, 36px);}
-  .pcard .pn{font-size:clamp(12px, 3.5vmin, 14px);}
-  .pcard .ph{font-size:clamp(13px, 4vmin, 15px);}
-  
-  /* Typography responsive dengan vmin */
-  .logo{font-size:clamp(18px, 5vmin, 22px);}
-  .tab{font-size:clamp(12px, 3vmin, 14px);padding:clamp(8px, 2vmin, 12px) clamp(14px, 4vmin, 18px);}
-  
-  /* Pastikan modal tidak terlalu kecil di layar tinggi */
-  .mbox{width:min(94%, 480px);padding:clamp(20px, 5vmin, 28px);}
-  
-  /* Grid item proportions */
-  .pcard{aspect-ratio: 1 / 1.15;}
-}
-
-/* Support untuk layar sangat tinggi (Full HD+ 20:9, 21:9) */
-@media (max-width:768px) and (min-aspect-ratio: 1/2.2) {
-  .grid{grid-template-columns:repeat(3, 1fr);grid-auto-rows: minmax(130px, 16vh);}
-  .pcard .pe{font-size: clamp(24px, 6vmin, 32px);}
-}
-
-/* Support untuk layar pendek (HD/HD+ 16:9) */
-@media (max-width:768px) and (max-aspect-ratio: 1/1.8) {
-  .grid{grid-template-columns:repeat(2, 1fr);grid-auto-rows: minmax(120px, 20vh);}
+/* Mobile Shell Stabilization */
+@media (max-width:768px){
+  body{position:fixed;inset:0;height:100%;width:100vw;overflow:hidden;display:flex;flex-direction:column;z-index:1;}
 }
 
 /* DRAWER */
-.drawer-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:299;backdrop-filter:blur(3px);}
+.drawer-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:999;backdrop-filter:blur(3px);}
 .drawer-overlay.show{display:block;}
-.drawer{position:fixed;top:0;left:0;bottom:0;width:270px;background:var(--surface);border-right:1px solid var(--border);z-index:300;transform:translateX(-100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;}
+.drawer{position:fixed;top:0;left:0;bottom:0;width:280px;background:var(--surface);border-right:1px solid var(--border);z-index:1000;transform:translateX(-100%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;will-change:transform;}
 .drawer.open{transform:translateX(0);}
 .drawer-head{padding:20px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .drawer-logo{font-family:var(--fh);font-size:17px;font-weight:800;}
@@ -134,10 +100,10 @@ html.light body{color-scheme:light;}
 .ts input:checked+.ts-sl:before{transform:translateX(18px);background:#111;}
 
 /* MAIN */
-.main{flex:1;min-height:0;display:grid;grid-template-columns:1fr 385px;overflow:hidden;}
+.main{flex:1;min-height:0;display:grid;grid-template-columns:1fr 385px;grid-template-rows:1fr;overflow:hidden;}
 
 /* LEFT */
-.left{display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden;min-height:0;}
+.left{display:flex;flex-direction:column;border-right:1px solid var(--border);overflow:hidden;}
 .search-row{padding:11px 15px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;display:flex;gap:7px;}
 .search-row input{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:8px 13px;border-radius:9px;font-family:var(--fb);font-size:13px;outline:none;transition:border .2s;}
 .search-row input:focus{border-color:var(--accent);}
@@ -186,7 +152,7 @@ html.light body{color-scheme:light;}
 .no-res{grid-column:1/-1;text-align:center;color:var(--muted);padding:40px;font-size:14px;}
 
 /* RIGHT */
-.right{display:flex;flex-direction:column;background:var(--surface);}
+.right{display:flex;flex-direction:column;background:var(--surface);min-height:0;}
 .kh{padding:13px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .kt{font-family:var(--fh);font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px;}
 .kc{background:var(--accent);color:#111;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
@@ -575,55 +541,41 @@ html.light body{color-scheme:light;}
    MOBILE RESPONSIVE - IMPROVED
    ══════════════════════════════════ */
 @media (max-width:768px){
-  /* body: ruang untuk bottom nav + safe area sistem */
-  body{height:100vh;height:100dvh;height:-webkit-fill-available;min-height:100vh;min-height:100dvh;padding-bottom:calc(64px + env(safe-area-inset-bottom,0px));font-size:15px;}
+  /* STRICT OVERRIDES: Hide Desktop UI */
+  .topbar-r, .btn-theme, .clock, #tgl, .badge, .tb, .db-dot, .db-nm { display: none!important; }
+  .mob-hamburger, .mob-cart-btn { display: flex!important; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 10px; background: var(--surface2); border: none; font-size: 22px; color: var(--text); }
+  .mob-cart-btn { background: var(--accent); color: #111; }
+  .mob-cart-badge{top: 4px; right: 4px;}
+
+  /* Absolute Shell Stability */
+  body{position:fixed;inset:0;height:100dvh;width:100vw;overflow:hidden;background:var(--bg);display:flex;flex-direction:column;}
+  .topbar{position:fixed;top:0;left:0;right:0;height:56px;z-index:1000;display:flex;align-items:center;justify-content:space-between;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--border);transform:translateZ(0);}
+  .logo{font-size:18px!important;position:absolute;left:50%;transform:translateX(-50%);font-weight:800;white-space:nowrap;margin:0!important;}
   
-  /* Better font rendering on mobile */
-  *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;}
+  .main{flex:1;display:flex;flex-direction:column;margin-top:56px;margin-bottom:64px;margin-bottom:calc(64px + env(safe-area-inset-bottom,0px));overflow:hidden;transform:translateZ(0);backface-visibility:hidden;width:100vw;}
+  .bottom-nav{position:fixed;bottom:0;left:0;right:0;width:100vw;height:64px;height:calc(64px + env(safe-area-inset-bottom,0px));z-index:1000;background:var(--surface);border-top:1px solid var(--border);display:flex!important;transform:translateZ(0);}
 
-  /* topbar mobile - taller for better touch */
-  .topbar{padding:0 14px;height:60px;}
-  .topbar-r{display:none;}
-  .btn-theme{display:none;}
-  .mob-hamburger,.mob-cart-btn{display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;background:var(--surface2);}
-  .mob-cart-btn{background:var(--accent);color:#111;}
-  .clock,#tgl,.badge,.db-dot{display:none;}
-  .logo{font-size:20px;}
+  .left{flex:1;width:100%;display:flex;flex-direction:column;overflow:hidden;min-height:0;}
+  .grid{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;transform:translateZ(0);}
+  .right{display:none;position:fixed;top:56px;left:0;right:0;bottom:64px;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:1100;overflow-y:auto;background:var(--surface);-webkit-overflow-scrolling:touch;transform:translateZ(0);backface-visibility:hidden;}
+  .right.mob-show{display:flex!important;animation:slideInRight .2s ease;bottom:0;bottom:env(safe-area-inset-bottom,0px);}
 
-  /* main layout: single column */
-  .main{grid-template-columns:1fr;height:100%;min-height:0;}
+  /* Forced 2-Column Grid for Phones */
+  .grid{grid-template-columns:repeat(2,1fr)!important;grid-auto-rows:160px;padding:12px;gap:10px;flex:1;overflow-y:auto;}
   
-  /* left panel: proper height handling untuk Full HD+ */
-  .left{height:100%;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
-
-  /* right panel (cart): hidden by default, full screen when shown */
-  .right{display:none;position:fixed;inset:0;bottom:64px;z-index:200;overflow-y:auto;background:var(--surface);-webkit-overflow-scrolling:touch;}
-  .right.mob-show{display:flex;animation:slideInRight .25s ease;}
-  @keyframes slideInRight{from{transform:translateX(100%);}to{transform:translateX(0);}}
-
-  /* product grid: responsive untuk semua ukuran mobile termasuk Full HD+ */
-  .grid{grid-template-columns:repeat(2,1fr);grid-auto-rows:minmax(140px, 18vh);padding:12px;gap:10px;}
-  @media (min-width:400px){
-    .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}
-  }
-  /* Fix untuk Full HD+ - grid lebih banyak kolom jika layar lebar */
-  @media (min-width:480px) and (max-width:768px){
-    .grid{grid-template-columns:repeat(3, 1fr);grid-auto-rows:minmax(130px, 16vh);}
-  }
-  @media (min-width:640px) and (max-width:768px){
-    .grid{grid-template-columns:repeat(4, 1fr);grid-auto-rows:minmax(120px, 15vh);}
-  }
-  .pcard{padding:14px 12px 11px;border-radius:16px;}
+  .pcard{padding:14px 12px 11px;border-radius:16px;aspect-ratio: auto;}
   .pcard .pe{font-size:32px;margin-bottom:8px;}
-  .pcard .pn{font-size:13.5px;font-weight:600;line-height:1.35;}
+  .pcard .pn{font-size:13px;font-weight:600;line-height:1.35;}
   .pcard .ph{font-size:14px;font-weight:700;}
-  .pcard .ps{font-size:11px;}
+  .pcard .ps{font-size:10px;}
   .pcard:active{transform:scale(0.97);}
 
-  /* search row - larger touch targets */
-  .search-row{padding:12px;gap:10px;}
-  .search-row input{padding:12px 14px;font-size:15px;border-radius:12px;}
-  .btn-add,.btn-scan{padding:12px 16px;font-size:13px;border-radius:12px;min-height:44px;}
+  /* search row - optimized to fit Scan and +Tambah */
+  .search-row{padding:10px 12px;gap:6px;}
+  .search-row input{flex:1;padding:10px 12px;font-size:14px;border-radius:10px;min-width:0;}
+  .btn-add,.btn-scan{padding:10px 12px;font-size:12.5px;border-radius:10px;min-height:42px;flex-shrink:0;}
+  .btn-add{background:var(--accent);color:#111;font-weight:700;}
+  .btn-scan{background:var(--surface2);border:1px solid var(--border);}
 
   /* kategori tabs - larger touch targets */
   .kat-tabs{padding:12px;gap:8px;}
@@ -642,30 +594,25 @@ html.light body{color-scheme:light;}
   .mac{margin-top:18px;}
   .mbtn{padding:14px 16px;font-size:14px;border-radius:10px;min-height:48px;}
 
-  /* keranjang - improved for mobile */
-  .kh{padding:14px 16px;}
-  .kt{font-size:16px;}
-  .klist{padding:12px;max-height:40vh;max-height:40dvh;}
-  .ki{padding:12px;border-radius:12px;margin-bottom:8px;}
-  .ki .ie{font-size:24px;}
-  .ki .in{font-size:14px;}
-  .ki .is{font-size:13px;}
-  .qb{width:36px;height:36px;font-size:16px;border-radius:8px;}
-  .qn{font-size:15px;min-width:24px;}
-  
-  /* summary section - improved touch targets */
-  .sum{padding:16px;}
-  .sr{font-size:14px;}
-  .sr.tot{font-size:20px;margin-bottom:12px;padding-top:10px;}
+  /* keranjang - scrolling fixes */
+  .kh{padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .kt{font-size:15px;font-weight:700;}
+  .klist{flex:none;height:auto;overflow-y:visible;padding:12px;min-height:auto;-webkit-overflow-scrolling:touch;}
+  .ki{padding:16px 14px;border-radius:14px;margin-bottom:10px;gap:12px;}
+  .ki .ie{font-size:30px;}
+  .ki .in{font-size:15px;font-weight:700;margin-bottom:4px;}
+  .sum{padding:12px 14px;border-top:1px solid var(--border);background:var(--surface2);flex-shrink:0;}
+  .sr{font-size:13px;margin-bottom:3px;}
+  .sr.tot{font-size:22px;margin-bottom:6px;padding-top:4px;}
   .diskon-row{gap:8px;margin-bottom:12px;}
   .dinput{width:80px;padding:10px;font-size:15px;}
   .dsel{padding:10px;font-size:14px;}
-  .qr{grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;}
-  .qkb{padding:12px 6px;font-size:13px;border-radius:10px;min-height:44px;}
-  .ibayar{padding:14px 16px;font-size:18px;margin-bottom:8px;border-radius:12px;min-height:52px;}
-  .kr{font-size:14px;margin-bottom:12px;}
-  .kr span:last-child{font-size:16px;}
-  .btn-pay{padding:16px;font-size:16px;border-radius:14px;min-height:56px;letter-spacing:0.5px;}
+  .qr{grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px;}
+  .qkb{padding:10px 4px;font-size:12px;border-radius:8px;min-height:38px;}
+  .ibayar{padding:10px 14px;font-size:16px;margin-bottom:6px;border-radius:10px;min-height:44px;}
+  .kr{font-size:13px;margin-bottom:8px;}
+  .kr span:last-child{font-size:15px;}
+  .btn-pay{padding:14px;font-size:15px;border-radius:12px;min-height:48px;letter-spacing:0.3px;margin-top:2px;}
   
   /* pelanggan selector */
   .plg-row{padding:12px 0;}
@@ -780,7 +727,6 @@ html.light body{color-scheme:light;}
     {% endif %}
     {% if not user.is_superadmin %}
     <button class="tb" onclick="openPelanggan('kelola')">👥 Pelanggan</button>
-    <button class="tb" onclick="openPiutang()">⏳ Piutang</button>
     <button class="tb" onclick="openTutupKasir()" id="btnTutupKasir" style="position:relative">🔒 Tutup Kasir<span class="tk-badge hidden" id="tkBadge">!</span></button>
     {% endif %}
     {% if user.is_superadmin %}
@@ -806,9 +752,13 @@ html.light body{color-scheme:light;}
     <button class="btn-theme" id="btnTheme" onclick="toggleTheme()" title="Toggle Dark/Light">🌙</button>
     <a href="/logout" class="btn-logout" title="Keluar">↩ Keluar</a>
   </div>
+  {% if user.role == 'pemilik' %}
+  <button class="mob-cart-btn" onclick="openDompet()" aria-label="Dompet">💰</button>
+  {% else %}
   <button class="mob-cart-btn" onclick="mobView('keranjang')" aria-label="Keranjang">
     🛒<span class="mob-cart-badge hidden" id="mobCartBadge">0</span>
   </button>
+  {% endif %}
 </div>
 
 <!-- MAIN -->
@@ -834,11 +784,16 @@ html.light body{color-scheme:light;}
     </div>
     <div class="klist" id="klist"></div>
     <div class="sum">
-      <div class="plg-row" onclick="openPelanggan('pilih')" title="Pilih pelanggan">
-        <span style="color:var(--muted);font-size:12px;">👤 Pelanggan</span>
-        <span id="plgTerpilihLabel" style="font-size:12px;font-weight:600;color:var(--accent);">+ Pilih</span>
+      <div style="position:relative;margin-bottom:10px;">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">👤 Pelanggan</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="inputPelanggan" placeholder="Ketik atau pilih pelanggan..." 
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px;"
+            oninput="onInputPelanggan(this.value)" autocomplete="off">
+          <button type="button" class="mbtn pri" onclick="openPelanggan('pilih')" style="padding:10px 16px;font-size:13px;white-space:nowrap;">Pilih</button>
+        </div>
+        <input type="hidden" id="selectedPlgId" value="">
       </div>
-      <input type="hidden" id="selectedPlgId" value="">
       <div class="sr"><span>Subtotal (<span id="icount">0</span> item)</span><span id="subVal">Rp 0</span></div>
       <div class="diskon-row">
         <label>Diskon:</label>
@@ -998,7 +953,6 @@ html.light body{color-scheme:light;}
     <!-- NORMAL USER MENU (Pemilik/Karyawan) -->
     {% if user.role == 'pemilik' %}
     <button onclick="closeDrawer();openLaporan()"><span class="dn-icon">📊</span>Laporan Penjualan</button>
-    <button onclick="closeDrawer();openDompet()"><span class="dn-icon">💰</span>Dompet / Kas</button>
     {% endif %}
     <button onclick="closeDrawer();openPelanggan('kelola')"><span class="dn-icon">👥</span>Pelanggan</button>
     <button onclick="closeDrawer();openRiwayat()"><span class="dn-icon">📋</span>Riwayat Transaksi</button>
@@ -1185,33 +1139,79 @@ html.light body{color-scheme:light;}
       </button>
     </div>
     
-    <!-- Filter Periode -->
-    <div class="riwayat-filter-row">
-      <div class="riwayat-filter-dropdown">
-        <select id="rPeriode" onchange="onPeriodeChange()">
-          <option value="harian">📅 Periode Harian</option>
-          <option value="mingguan">📆 Periode Mingguan</option>
-          <option value="bulanan">📊 Periode Bulanan</option>
-        </select>
+    <!-- Wrapper Lunas -->
+    <div id="riwayatLunasSection">
+      <!-- Filter Periode -->
+      <div class="riwayat-filter-row">
+        <div class="riwayat-filter-dropdown">
+          <select id="rPeriode" onchange="onPeriodeChange()">
+            <option value="harian">📅 Periode Harian</option>
+            <option value="mingguan">📆 Periode Mingguan</option>
+            <option value="bulanan">📊 Periode Bulanan</option>
+          </select>
+        </div>
+        <div class="riwayat-filter-dropdown">
+          <input type="date" id="rTanggal" onchange="muatRiwayat()">
+        </div>
       </div>
-      <div class="riwayat-filter-dropdown">
-        <input type="date" id="rTanggal" onchange="muatRiwayat()">
+      
+      <!-- Summary Card (Dynamic) -->
+      <div class="riwayat-summary" id="rSummary">
+        <!-- Diisi oleh JavaScript -->
+      </div>
+      
+      <!-- Export Button -->
+      <button class="riwayat-export-btn" onclick="exportRiwayatExcel()">
+        <span>📥</span>
+        <span>Ekspor Penjualan (.xlsx)</span>
+      </button>
+      
+      <!-- List Transaksi -->
+      <div class="riwayat-list" id="rContent"></div>
+    </div>
+
+    <!-- Wrapper Belum Lunas (Piutang) -->
+    <div id="riwayatBelumLunasSection" style="display:none; padding-top: 10px;">
+      <!-- Reminder Card -->
+      <div id="piutangReminder" style="background:var(--red);color:#fff;padding:12px 16px;border-radius:10px;margin-bottom:16px;display:none">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:24px">⚠️</span>
+          <div>
+            <div style="font-weight:700">Piutang Jatuh Tempo</div>
+            <div style="font-size:13px;opacity:.9" id="piutangReminderText">0 piutang >30 hari</div>
+          </div>
+          <button class="mbtn" style="margin-left:auto;background:#fff;color:var(--red)" onclick="filterPiutangJatuhTempo()">Lihat</button>
+        </div>
+      </div>
+      
+      <!-- Search -->
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <input type="text" id="piutangCari" class="inp" placeholder="Cari nama pelanggan / no. transaksi..." style="flex:1" oninput="muatPiutang()">
+        <button class="mbtn sec" onclick="piutangCariPelanggan()">🔍 Cari</button>
+        <button class="mbtn" onclick="muatPiutang()">🔄 Refresh</button>
+      </div>
+      
+      <!-- Stats -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+        <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
+          <div style="font-size:12px;color:var(--muted)">Total Piutang</div>
+          <div style="font-size:20px;font-weight:800;color:var(--text)" id="piutangTotalCount">0</div>
+        </div>
+        <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
+          <div style="font-size:12px;color:var(--muted)">Total Nominal</div>
+          <div style="font-size:20px;font-weight:800;color:var(--red)" id="piutangTotalNominal">Rp 0</div>
+        </div>
+        <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
+          <div style="font-size:12px;color:var(--muted)">Jatuh Tempo</div>
+          <div style="font-size:20px;font-weight:800;color:var(--orange)" id="piutangJatuhTempo">0</div>
+        </div>
+      </div>
+      
+      <!-- List Piutang -->
+      <div id="piutangList" style="max-height:400px;overflow-y:auto;scrollbar-width:thin">
+        <div style="text-align:center;color:var(--muted);padding:40px">Memuat piutang...</div>
       </div>
     </div>
-    
-    <!-- Summary Card (Dynamic) -->
-    <div class="riwayat-summary" id="rSummary">
-      <!-- Diisi oleh JavaScript -->
-    </div>
-    
-    <!-- Export Button -->
-    <button class="riwayat-export-btn" onclick="exportRiwayatExcel()">
-      <span>📥</span>
-      <span>Ekspor Penjualan (.xlsx)</span>
-    </button>
-    
-    <!-- List Transaksi -->
-    <div class="riwayat-list" id="rContent"></div>
   </div>
 </div>
 
@@ -2227,57 +2227,6 @@ html.light body{color-scheme:light;}
   </div>
 </div>
 
-<!-- MODAL PIUTANG -->
-<div class="overlay" id="mPiutang">
-  <div class="mbox wide">
-    <div class="mtit">⏳ Manajemen Piutang</div>
-    <div class="msub">Daftar piutang belum lunas dan history pembayaran</div>
-    
-    <!-- Reminder Card -->
-    <div id="piutangReminder" style="background:var(--red);color:#fff;padding:12px 16px;border-radius:10px;margin-bottom:16px;display:none">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="font-size:24px">⚠️</span>
-        <div>
-          <div style="font-weight:700">Piutang Jatuh Tempo</div>
-          <div style="font-size:13px;opacity:.9" id="piutangReminderText">0 piutang >30 hari</div>
-        </div>
-        <button class="mbtn" style="margin-left:auto;background:#fff;color:var(--red)" onclick="filterPiutangJatuhTempo()">Lihat</button>
-      </div>
-    </div>
-    
-    <!-- Search -->
-    <div style="display:flex;gap:10px;margin-bottom:16px">
-      <input type="text" id="piutangCari" class="inp" placeholder="Cari nama pelanggan / no. transaksi..." style="flex:1" oninput="muatPiutang()">
-      <button class="mbtn sec" onclick="piutangCariPelanggan()">🔍 Cari</button>
-      <button class="mbtn" onclick="muatPiutang()">🔄 Refresh</button>
-    </div>
-    
-    <!-- Stats -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
-      <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
-        <div style="font-size:12px;color:var(--muted)">Total Piutang</div>
-        <div style="font-size:20px;font-weight:800;color:var(--text)" id="piutangTotalCount">0</div>
-      </div>
-      <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
-        <div style="font-size:12px;color:var(--muted)">Total Nominal</div>
-        <div style="font-size:20px;font-weight:800;color:var(--red)" id="piutangTotalNominal">Rp 0</div>
-      </div>
-      <div style="background:var(--surface2);padding:12px;border-radius:10px;text-align:center">
-        <div style="font-size:12px;color:var(--muted)">Jatuh Tempo</div>
-        <div style="font-size:20px;font-weight:800;color:var(--orange)" id="piutangJatuhTempo">0</div>
-      </div>
-    </div>
-    
-    <!-- List Piutang -->
-    <div id="piutangList" style="max-height:400px;overflow-y:auto;scrollbar-width:thin">
-      <div style="text-align:center;color:var(--muted);padding:40px">Memuat piutang...</div>
-    </div>
-    
-    <div class="mac" style="margin-top:16px">
-      <button class="mbtn sec" onclick="closeM('mPiutang')">Tutup</button>
-    </div>
-  </div>
-</div>
 
 <!-- MODAL BAYAR PIUTANG -->
 <div class="overlay" id="mBayarPiutang">
@@ -2388,8 +2337,9 @@ async function init() {
 
 function setTodayDate() {
   const today = new Date().toISOString().split('T')[0];
-  ['rDari','rKe','lDari','lKe'].forEach(id => {
-    document.getElementById(id).value = today;
+  ['rTanggal','rDari','rKe','lDari','lKe'].forEach(id => {
+    let el = document.getElementById(id);
+    if (el) el.value = today;
   });
 }
 
@@ -2810,12 +2760,68 @@ function selectPiutangPelanggan(id, nama) {
   document.getElementById('piutangPelangganDropdown')?.remove();
 }
 
+// ══════════════════════════════════
+//  INPUT PELANGGAN UMUM (AUTOCOMPLETE)
+// ══════════════════════════════════
+let _pelangganListCache = [];
+
+async function onInputPelanggan(value) {
+  // Reset selected ID saat user ketik ulang
+  document.getElementById('selectedPlgId').value = '';
+  if (!value || value.length < 2) {
+    document.getElementById('pelangganDropdown')?.remove();
+    return;
+  }
+  try {
+    const data = await api(`/api/pelanggan?cari=${encodeURIComponent(value)}`);
+    _pelangganListCache = data;
+    renderPelangganDropdown(data, value);
+  } catch(e) {}
+}
+
+function renderPelangganDropdown(data, searchValue) {
+  document.getElementById('pelangganDropdown')?.remove();
+  if (!data.length) return;
+  const dropdown = document.createElement('div');
+  dropdown.id = 'pelangganDropdown';
+  dropdown.style.cssText = `
+    position: absolute; top: calc(100% + 4px); left: 0; right: 80px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; max-height: 200px; overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000;
+  `;
+  dropdown.innerHTML = data.map(p => `
+    <div onclick="selectInputPelanggan(${p.id}, '${p.nama.replace(/'/g, "\\'")}')"
+         style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px;">
+      <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #111; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">${p.nama[0].toUpperCase()}</div>
+      <div style="flex: 1;">
+        <div style="font-weight: 600; font-size: 14px;">${p.nama}</div>
+        ${p.telepon ? `<div style="font-size: 12px; color: var(--muted);">${p.telepon}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+  const container = document.getElementById('inputPelanggan').parentElement;
+  container.style.position = 'relative';
+  container.appendChild(dropdown);
+}
+
+function selectInputPelanggan(id, nama) {
+  document.getElementById('inputPelanggan').value = nama;
+  document.getElementById('selectedPlgId').value = id;
+  document.getElementById('pelangganDropdown')?.remove();
+}
+
 // Tutup dropdown saat klik di luar
 document.addEventListener('click', (e) => {
-  const dropdown = document.getElementById('piutangPelangganDropdown');
-  const input = document.getElementById('piutangNama');
-  if (dropdown && !dropdown.contains(e.target) && e.target !== input) {
-    dropdown.remove();
+  const ddPiutang = document.getElementById('piutangPelangganDropdown');
+  const inputPiutang = document.getElementById('piutangNama');
+  if (ddPiutang && !ddPiutang.contains(e.target) && e.target !== inputPiutang) {
+    ddPiutang.remove();
+  }
+  const ddPlg = document.getElementById('pelangganDropdown');
+  const inputPlg = document.getElementById('inputPelanggan');
+  if (ddPlg && !ddPlg.contains(e.target) && e.target !== inputPlg) {
+    ddPlg.remove();
   }
 });
 
@@ -2854,27 +2860,31 @@ async function prosesTrx() {
   try {
     let plgId = parseInt(document.getElementById('selectedPlgId').value) || null;
     
-    // Piutang: auto-create pelanggan jika belum ada (nama diketik manual)
-    if (isPiutang && !plgId) {
-      const namaPiutang = document.getElementById('piutangNama').value.trim();
-      // Cek apakah pelanggan dengan nama ini sudah ada
-      const existing = Array.isArray(_piutangPelangganList) && _piutangPelangganList.find(p => p.nama.toLowerCase() === namaPiutang.toLowerCase());
-      if (existing) {
-        plgId = existing.id;
-      } else {
-        // Buat pelanggan baru
-        try {
-          const newPlg = await api('/api/pelanggan', 'POST', { 
-            nama: namaPiutang, 
-            telepon: '', 
-            alamat: '', 
-            catatan: 'Auto-created dari piutang' 
-          });
-          plgId = newPlg.id;
-        } catch(e) {
-          showToast('❌ Gagal membuat pelanggan: ' + e.message);
-          showLoading(false);
-          return;
+    // Auto-create pelanggan jika belum ada (nama diketik manual)
+    if (!plgId) {
+      const namaInput = isPiutang 
+        ? document.getElementById('piutangNama').value.trim()
+        : document.getElementById('inputPelanggan').value.trim();
+      
+      if (namaInput) {
+        const cacheList = isPiutang ? _piutangPelangganList : _pelangganListCache;
+        const existing = Array.isArray(cacheList) && cacheList.find(p => p.nama.toLowerCase() === namaInput.toLowerCase());
+        if (existing) {
+          plgId = existing.id;
+        } else {
+          try {
+            const newPlg = await api('/api/pelanggan', 'POST', { 
+              nama: namaInput, 
+              telepon: '', 
+              alamat: '', 
+              catatan: isPiutang ? 'Auto-created dari piutang' : 'Auto-created dari kasir' 
+            });
+            plgId = newPlg.id;
+          } catch(e) {
+            showToast('❌ Gagal membuat pelanggan: ' + e.message);
+            showLoading(false);
+            return;
+          }
         }
       }
     }
@@ -4058,14 +4068,24 @@ async function openRiwayat() {
   // Set default tanggal hari ini
   const today = new Date().toISOString().split('T')[0];
   document.getElementById('rTanggal').value = today;
-  await muatRiwayat(); 
+  switchTabRiwayat('lunas');
 }
 
 function switchTabRiwayat(tab) {
   riwayatTab = tab;
   document.getElementById('tabLunas').classList.toggle('active', tab === 'lunas');
   document.getElementById('tabBelumLunas').classList.toggle('active', tab === 'belum_lunas');
-  muatRiwayat();
+  
+  if (tab === 'lunas') {
+    document.getElementById('riwayatLunasSection').style.display = 'block';
+    document.getElementById('riwayatBelumLunasSection').style.display = 'none';
+    muatRiwayat();
+  } else {
+    document.getElementById('riwayatLunasSection').style.display = 'none';
+    document.getElementById('riwayatBelumLunasSection').style.display = 'block';
+    muatPiutang();
+    muatReminderPiutang();
+  }
 }
 
 function onPeriodeChange() {
@@ -6616,20 +6636,17 @@ function pilihPelanggan(id, nama) {
   }
   
   // Mode biasa (pilih untuk transaksi reguler)
-  document.getElementById('selectedPlgId').value    = id;
-  document.getElementById('plgTerpilihLabel').textContent = nama + '  ✕';
-  document.getElementById('plgTerpilihLabel').onclick = (e) => {
-    e.stopPropagation();
-    clearPelanggan();
-  };
+  document.getElementById('selectedPlgId').value = id;
+  const inputPelanggan = document.getElementById('inputPelanggan');
+  if (inputPelanggan) inputPelanggan.value = nama;
   closeM('mPelanggan');
   showToast(`👤 Pelanggan: ${nama}`);
 }
 
 function clearPelanggan() {
-  document.getElementById('selectedPlgId').value    = '';
-  document.getElementById('plgTerpilihLabel').textContent = '+ Pilih';
-  document.getElementById('plgTerpilihLabel').onclick = null;
+  document.getElementById('selectedPlgId').value = '';
+  const inputPelanggan = document.getElementById('inputPelanggan');
+  if (inputPelanggan) inputPelanggan.value = '';
   // Reset piutang fields
   piutangPelangganId = null;
   const piutangNama = document.getElementById('piutangNama');
