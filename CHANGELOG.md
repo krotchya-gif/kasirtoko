@@ -22,6 +22,7 @@ Format: `[Versi] — Tanggal — Ringkasan`
 ### 🔧 Enhancement
 - **Kualitas gambar struk digital** — Resolusi diperbesar dari 220px menjadi **800px lebar**, font lebih besar dan tebal, sehingga jelas saat dibagikan ke WhatsApp/Instagram
 - **Input pelanggan lebih ergonomis** — Tombol "Pilih" pelanggan diganti dengan input field + tombol Pilih di sampingnya
+- **Update ikon aplikasi** — `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, dan `favicon.png` diperbarui dengan branding toko yang lebih baik
 
 ---
 
