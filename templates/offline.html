@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="icon" type="image/png" href="/static/favicon.png">
 <title>KasirToko — Offline</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -11,6 +12,7 @@ body{background:#0f1117;color:#f0f0f8;font-family:'DM Sans',sans-serif;
   height:100dvh;text-align:center;padding:24px;}
 .wrap{max-width:320px;}
 .ico{font-size:64px;margin-bottom:20px;display:block;}
+.ico svg{width:64px;height:64px;stroke:var(--accent,#f5a623);}
 h1{font-size:22px;font-weight:700;margin-bottom:8px;color:#f5a623;}
 p{font-size:14px;color:#8891a8;line-height:1.6;margin-bottom:24px;}
 button{background:#f5a623;color:#111;border:none;padding:12px 28px;
@@ -20,10 +22,12 @@ button:active{opacity:.8;}
 </head>
 <body>
 <div class="wrap">
-  <span class="ico">📡</span>
+  <span class="ico"><i data-lucide="wifi-off">📶</i></span>
   <h1>Tidak Ada Koneksi</h1>
   <p>Pastikan HP dan server dalam jaringan WiFi yang sama, lalu coba lagi.</p>
-  <button onclick="location.reload()">🔄 Coba Lagi</button>
+  <button onclick="location.reload()"><i data-lucide="refresh-cw" style="width:16px;height:16px;vertical-align:-3px;">🔄</i> Coba Lagi</button>
 </div>
+<script src="/static/vendor/lucide.min.js"></script>
+<script>if (window.lucide) lucide.createIcons();</script>
 </body>
 </html>

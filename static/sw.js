@@ -1,10 +1,20 @@
 // KasirToko Service Worker
-const CACHE_NAME = 'kasirtoko-v20260316-6';
+// P3-7: WAJIB bump CACHE_NAME setiap deploy agar user tidak terjebak di UI basi.
+// Format: kasirtoko-vYYYYMMDD-<nomor urut hari itu>
+const CACHE_NAME = 'kasirtoko-v20260906-2';
 const STATIC_ASSETS = [
   '/',
   '/static/manifest.json',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
+  '/static/vendor/lucide.min.js',
+  '/static/css/app.css',
+  '/static/js/api.js',
+  '/static/js/pendukung.js',
+  '/static/js/kasir.js',
+  '/static/js/produk.js',
+  '/static/js/transaksi.js',
+  '/static/js/laporan.js',
   '/offline'
 ];
 

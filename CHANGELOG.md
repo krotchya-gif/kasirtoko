@@ -5,6 +5,56 @@ Format: `[Versi] — Tanggal — Ringkasan`
 
 ---
 
+## [v2.3.0] — 2026-09-06 — Pecah File Backend + Frontend (split, nol ubah logika)
+
+### ✂️ Struktur baru
+- **Backend** `app.py` (5.016 baris) → paket `kasirtoko/` (15 modul: `config`, `db`, `auth`, `models_init`, 10 blueprint `routes/`); `app.py` tinggal `create_app()` + run; `api/index.py` tak tersentuh
+- **Frontend** `index.html` (7.287 baris) → `static/css/app.css` + 6 modul `static/js/` (`api`, `pendukung`, `kasir`, `produk`, `transaksi`, `laporan`); `init()` dipanggil di akhir `laporan.js`; SW cache per-file
+- **Verifikasi**: route 75/75 identik, `pytest` 16/16 hijau, smoke 29/29 lolos, render `/login` + `/` 200, `node --check` 6/6, DB utuh + integrity ok
+- Perbaikan kecil saat split: `pages.py` tambah import `_login_attempts` yang tertinggal; test pakai `kasirtoko.auth` untuk reset rate-limit
+
+## [v2.2.0] — 2026-09-05 — Perbaikan Keamanan, Isolasi Multi-Tenant & Validasi Server
+
+### 🔴 Kritis (P0)
+- **Fix crash void/restore** — `void_transaksi` & `restore_transaksi` memakai `store_id` yang tidak didefinisikan (`NameError` → 500). Kini diisi + filter toko, restore juga menolak transaksi yang closing-nya sudah confirmed
+- **Isolasi multi-tenant** — 11 endpoint kini filter `store_id`: `GET /api/transaksi`, detail transaksi, kategori, produk-terjual, struk image, stok-history, export PDF/CSV, laporan hari-ini/rentang/chart
+- **Ganti password sinkron** — update kedua tabel `users` + `pengguna` via username (sequence id keduanya berbeda); verifikasi password lama cek kedua tabel
+
+### ⚠️ Logika bisnis (P1)
+- **Transaksi dihitung ulang di server** — subtotal/diskon/total/kembalian tidak lagi dipercaya dari client; validasi stok, produk milik toko, pelanggan milik toko, uang kurang ditolak; kolom `kasir` terisi nama user; `no_trx` retry anti-duplikat; `stok_log` keluar tercatat
+- **Kas single-source (Opsi A)** — pemasukan kas HANYA dicatat saat tutup kasir dikonfirmasi (sebelumnya dicatat 2x: saat transaksi + saat konfirmasi → omzet ganda di laporan keuangan)
+- **Definisi produk terlaris disamakan** — `produk-terjual` kini sertakan piutang seperti `top-produk`
+- **CSV barcode** — export & import kini membawa kolom `barcode` (roundtrip tidak lagi menghapus barcode); import validasi barcode unik per toko
+- **Reset kas arsip** — saldo dinolkan via jurnal penyeimbang, riwayat tidak dihapus
+- **Pelanggan** — hapus ditolak bila ada piutang aktif; tambah nama duplikat beri peringatan 409 (frontend: konfirmasi force)
+- **Export PDF** — hapus Table duplikat, N+1 → 1 query agregat, render semua 500 baris + keterangan jumlah
+
+### 🔐 Hardening (P2)
+- **CORS dibatasi** ke `APP_URL` (env, default localhost); **SECRET_KEY fail-fast** di production; peringatan startup bila password default masih aktif
+- **Error 500 generik** — detail exception hanya di log server
+- **Rate-limit login** 10x/menit/IP; validasi `tambah/update_produk` anti-KeyError
+- **Ghost mode read-only di backend** — decorator `no_ghost_write` di 7 endpoint tulis
+- **Import CSV** — guard filename, batas 2 MB (413 JSON), mode `ganti` wajib konfirmasi + backup otomatis ke `backups/`
+
+### 🗄️ Data & struktur (P3)
+- **Index baru** (P3-1) + kolom `piutang_bayar.idempotency_key` + pembayaran piutang idempoten (409 anti double-submit, frontend kirim key per klik)
+- **`setup_postgres_schema.py` full schema** — bisa untuk DB fresh (14 tabel + kolom + index)
+- **`api/index.py` jadi wrapper** `from app import app` (single source of truth) + fail-fast bila Vercel tanpa Postgres
+- **Backfill `user_stores` idempoten** (kecualikan pseudo-store id 0)
+- **`GET /api/transaksi` paginasi `offset`** + batch items (tanpa N+1); `GET /api/health` untuk diagnosa
+- **Test suite** `tests/` — 16 test pytest hijau (transaksi, void/restore, isolasi toko, password, piutang, kas, ghost mode, export, reset transaksi)
+
+### ✨ Fitur baru: Reset Transaksi & Dompet
+- **Endpoint** `POST /api/transaksi/reset` (pemilik only, ghost-mode diblokir): hapus transaksi, item, piutang-bayar, tutup-kasir & kas **scope toko aktif saja**; produk, stok & pelanggan tidak disentuh
+- **Backup otomatis** ke `backups/reset-store{id}-{timestamp}-*.csv` sebelum menghapus
+- **UI**: tombol 🗑 Reset di Riwayat Transaksi (hanya tampil untuk pemilik) + modal ketik `RESET TRANSAKSI`
+
+### ✨ UI/UX Mobile & Ikon Lucide
+- **Mobile overflow fix** — logo max-width + ellipsis (nama toko panjang tidak tabrakan tombol), karti statistik grafik stack di HP, baris diskon wrap, tabel laporan scroll horizontal, padding overlay, tabel detail transaksi ringkas
+- **Ikon Lucide ganti emoji UI** — 230+ emoji chrome (nav, topbar, drawer, tombol, judul modal) jadi SVG Lucide self-host (`static/vendor/` + SW cache, tetap jalan offline); emoji produk & picker tidak diubah (data); `applyThemeUI` pakai ikon sun/moon; halaman login & offline ikut dikonversi
+
+---
+
 ## [v2.1.0] — 2026-04-04 — Perbaikan Mobile, Autocomplete Pelanggan & Kualitas Struk
 
 ### 🐛 Bug Fix

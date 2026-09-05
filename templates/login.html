@@ -71,6 +71,7 @@ body{
   background:var(--surface2);border:1px solid var(--border);padding:1px 6px;
   border-radius:4px;font-size:11px;color:var(--text);font-family:monospace;
 }
+.ic{width:1.2em;height:1.2em;vertical-align:-0.25em;stroke-width:2;}
 
 .db-dot{
   display:inline-block;width:7px;height:7px;border-radius:50%;
@@ -102,7 +103,7 @@ body{
   </div>
 
   {% if error %}
-  <div class="error-box">⚠️ {{ error }}</div>
+  <div class="error-box"><i data-lucide="triangle-alert" class="ic"></i> {{ error }}</div>
   {% endif %}
 
   <form method="POST" action="/login" autocomplete="on">
@@ -128,29 +129,36 @@ body{
         required
       >
     </div>
-    <button type="submit" class="btn-login">🔐 MASUK</button>
+    <button type="submit" class="btn-login"><i data-lucide="key-round" class="ic"></i> MASUK</button>
   </form>
 
   <div class="hint">
     <div style="margin-bottom:12px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);">
-      <div style="font-weight:700;color:var(--accent);margin-bottom:6px;">👑 Superadmin</div>
+      <div style="font-weight:700;color:var(--accent);margin-bottom:6px;"><i data-lucide="crown" class="ic"></i> Superadmin</div>
       <code>superadmin</code> / <code>superadmin123</code><br>
       <span style="font-size:11px;">Untuk setup toko dan pemilik baru</span>
     </div>
-    
+
     <div style="margin-bottom:12px;">
-      <div style="font-weight:700;color:var(--text);margin-bottom:6px;">🏪 Pemilik Toko</div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px;"><i data-lucide="store" class="ic"></i> Pemilik Toko</div>
       <code>pemilik</code> / <code>pemilik123</code>
     </div>
-    
+
     <div style="margin-bottom:12px;">
-      <div style="font-weight:700;color:var(--text);margin-bottom:6px;">👤 Karyawan</div>
+      <div style="font-weight:700;color:var(--text);margin-bottom:6px;"><i data-lucide="user" class="ic"></i> Karyawan</div>
       <code>karyawan</code> / <code>karyawan123</code>
     </div>
-    
-    <span style="color:var(--red);font-size:11px">⚠️ Segera ganti password setelah login pertama.</span>
+
+    <span style="color:var(--red);font-size:11px"><i data-lucide="triangle-alert" class="ic"></i> Segera ganti password setelah login pertama.</span>
   </div>
 </div>
+
+<script src="/static/vendor/lucide.min.js" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.lucide) lucide.createIcons();
+});
+</script>
 
 </body>
 </html>
